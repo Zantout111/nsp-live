@@ -1,0 +1,131 @@
+{
+  "site": {
+    "title": "Syriskt Pund Kurs",
+    "headerTitle": "Syriskt Pund Kurs Idag",
+    "description": "Live Växelkurser",
+    "copyright": "Syriskt Pund Kurs - Alla rättigheter förbehållna"
+  },
+  "header": {
+    "lastUpdate": "Senaste uppdatering",
+    "refresh": "Uppdatera"
+  },
+  "tabs": {
+    "currencies": "Valutor",
+    "gold": "Guld",
+    "fuel": "Bränsle"
+  },
+  "gold": {
+    "title": "Globalt Guldpris",
+    "ounceUsd": "Uns (USD)",
+    "gramUsd": "Gram (USD)",
+    "gramSyp": "Gram (SYP)",
+    "lastUpdate": "Senaste uppdatering"
+  },
+  "fuel": {
+    "title": "Bränslepriser",
+    "pricePerUnit": "Pris / Enhet",
+    "lastUpdate": "Senaste uppdatering"
+  },
+  "currency": {
+    "buyRate": "Köpkurs",
+    "sellRate": "Säljkurs",
+    "syp": "Syriska Pund",
+    "shareRate": "Dela",
+    "shareSuccess": "Delningsfönster öppnat",
+    "shareDownloaded": "Bild nedladdad",
+    "shareError": "Kunde inte skapa eller dela bilden",
+    "sharePromo": "Se de senaste växelkurserna för syriska pund mot utländska valutor",
+    "shareReadyTitle": "Bilden är klar att delas",
+    "shareReadyDescription": "På mobilen krävs ofta ett andra tryck för WhatsApp m.m. Tryck på „Öppna delning“ och välj app.",
+    "shareOpenSheet": "Öppna delning",
+    "shareDownloadOnly": "Ladda ner bild",
+    "shareDialogCancel": "Avbryt"
+  },
+  "calculator": {
+    "title": "Valutaomvandlare",
+    "amount": "Belopp",
+    "currency": "Valuta",
+    "operation": "Operation",
+    "toSyp": "Till SYP",
+    "fromSyp": "Från SYP",
+    "result": "Resultat"
+  },
+  "admin": {
+    "title": "Adminpanel",
+    "description": "Hantera Växelkurser & Guldpris",
+    "login": "Logga in",
+    "logout": "Logga ut",
+    "username": "Användarnamn",
+    "password": "Lösenord",
+    "usernamePlaceholder": "Ange användarnamn",
+    "passwordPlaceholder": "Ange lösenord",
+    "loginButton": "Logga in",
+    "backToHome": "Tillbaka till startsidan",
+    "goldManagement": "Guldpris-hantering",
+    "currentPrice": "Aktuellt pris",
+    "perOunce": "Per uns",
+    "autoUpdate": "Auto-uppdatera från leverantör",
+    "orManual": "Eller ange pris manuellt",
+    "ouncePriceUsd": "Unspris (USD)",
+    "gramPriceUsd": "Grampris (USD)",
+    "saveGold": "Spara guldpris",
+    "exchangeManagement": "Växelkurs-hantering",
+    "fuelManagement": "Bränslepriser-hantering",
+    "stats": "Snabbstatistik",
+    "currencyCount": "Valutor",
+    "usdRate": "USD-kurs",
+    "eurRate": "EUR-kurs",
+    "tryRate": "TRY-kurs",
+    "save": "Spara"
+  },
+  "currencies": {
+    "USD": "US-dollar",
+    "EUR": "Euro",
+    "TRY": "Turkisk Lira",
+    "SAR": "Saudisk Riyal",
+    "AED": "UAE Dirham",
+    "GBP": "Brittiskt Pund",
+    "CHF": "Schweizisk Franc",
+    "CAD": "Kanadensisk Dollar",
+    "AUD": "Australisk Dollar",
+    "JOD": "Jordansk Dinar"
+  },
+  "fuels": {
+    "GASOLINE_95": "Bensin 95",
+    "GASOLINE_98": "Bensin 98",
+    "DIESEL": "Diesel",
+    "LPG": "LPG",
+    "KEROSENE": "Fotogen",
+    "MAZUT": "Masut"
+  },
+  "newLira": {
+    "title": "Ny Lira",
+    "description": "Nya syriska pund priser (2 nollor borttagna)"
+  },
+  "footer": {
+    "privacy": "Integritetspolicy",
+    "about": "Om oss"
+  },
+  "rateDelta": {
+    "sinceLast": "Jämfört med senaste uppdateringen",
+    "buyShort": "Köp",
+    "sellShort": "Sälj",
+    "none": "—"
+  },
+  "seo": {
+    "homeHeading": "Syriskt pund kurs idag",
+    "homeLead": "Den här sidan samlar den syrianska pundkursen mot stora valutor, guld- och bränslepriser samt en snabb överblick över globala valutamarknader och kryptovalutor. Data uppdateras regelbundet från flera källor.",
+    "homeKeywords": "syriskt pund kurs idag, SYP växelkurs, dollar SYP, guldpris, bränsle, krypto"
+  },
+  "legal": {
+    "privacyTitle": "Integritetspolicy",
+    "privacyP1": "Vi säljer inte dina personuppgifter. Vi kan samla in minimal teknisk information (t.ex. webbläsartyp) för att förbättra prestanda.",
+    "privacyP2": "Priser och indikatorer som visas är ungefärliga och vägledande; de kan skilja sig från faktiska marknads- eller växlingskurser — kontrollera alltid en pålitlig källa före ekonomiska beslut.",
+    "privacyP3": "Genom att använda webbplatsen godkänner du denna policy. Vid frågor, använd kontaktvägar om de publiceras på sidan.",
+    "aboutTitle": "Om oss",
+    "aboutP1": "„Syriskt Pund Kurs“ är en översikt (arabiska i fokus) som samlar SYP-växelkursindikatorer, guld, bränsle och kryptopriser i ett lättläst gränssnitt för mobil och dator.",
+    "aboutP2": "Vi aggregerar offentlig data och specialistwebbplatser; synk och justeringar kan göras från adminpanelen. Målet är en snabb marknadsbild, inte finansiell rådgivning.",
+    "aboutP3": "Siffror är referensvärden och kan släpa efter livemarknaden; kontrollera officiella eller växlingskurser när det spelar roll.",
+    "backHome": "Tillbaka till startsidan"
+  }
+}

@@ -1,0 +1,136 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// العملات المتاحة
+model Currency {
+  id          String   @id @default(cuid())
+  code        String   @unique // USD, EUR, TRY, SAR, etc.
+  nameAr      String   // اسم العملة بالعربية
+  nameEn      String   // اسم العملة بالإنجليزية
+  symbol      String?  // رمز العملة ($, €, etc.)
+  flagEmoji   String?  // علم الدولة
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  rates       ExchangeRate[]
+}
+
+// أسعار الصرف
+model ExchangeRate {
+  id           String   @id @default(cuid())
+  currencyId   String
+  currency     Currency @relation(fields: [currencyId], references: [id])
+  buyRate      Float    // سعر الشراء (ليرة سورية لكل وحدة أجنبية)
+  sellRate     Float    // سعر البيع
+  /// لقطة سابقة لحساب النسبة مقارنة بآخر جلب
+  prevBuyRate    Float?
+  prevSellRate   Float?
+  prevCapturedAt DateTime?
+  lastUpdated  DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  @@unique([currencyId])
+}
+
+// سعر الذهب
+model GoldPrice {
+  id           String   @id @default(cuid())
+  priceUsd     Float    // سعر الأونصة بالدولار
+  pricePerGram Float    // سعر الغرام بالدولار
+  prevPriceUsd     Float?
+  prevPricePerGram Float?
+  prevCapturedAt   DateTime?
+  lastUpdated  DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// أسعار المحروقات
+model FuelPrice {
+  id           String   @id @default(cuid())
+  code         String   @unique // GASOLINE_95, GASOLINE_98, DIESEL, etc.
+  nameAr       String   // اسم المحروق بالعربية
+  nameEn       String   // اسم المحروق بالإنجليزية
+  price        Float    // السعر بالليرة السورية
+  prevPrice      Float?
+  prevCapturedAt DateTime?
+  unitAr       String   @default("لتر") // الوحدة بالعربية
+  unitEn       String   @default("Liter") // الوحدة بالإنجليزية
+  lastUpdated  DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// أسعار الفوركس
+model ForexRate {
+  id           String   @id @default(cuid())
+  pair         String   @unique // EUR/USD, GBP/USD, etc.
+  nameAr       String   // اسم الزوج بالعربية
+  nameEn       String   // اسم الزوج بالإنجليزية
+  rate         Float    // سعر الصرف
+  change       Float    @default(0) // نسبة التغير
+  flag1        String   // علم العملة الأولى
+  flag2        String   // علم العملة الثانية
+  lastUpdated  DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// أسعار العملات الرقمية
+model CryptoRate {
+  id           String   @id @default(cuid())
+  code         String   @unique // BTC, ETH, etc.
+  nameAr       String   // اسم العملة بالعربية
+  nameEn       String   // اسم العملة بالإنجليزية
+  price        Float    // السعر بالدولار
+  change       Float    @default(0) // نسبة التغير
+  icon         String?  // رمز العملة
+  lastUpdated  DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// إعدادات الموقع
+model SiteSettings {
+  id                String   @id @default(cuid())
+  siteName          String   @default("سعر الليرة السورية")
+  siteNameAr        String?  // اسم الموقع بالعربية
+  siteNameEn        String?  // اسم الموقع بالإنجليزية
+  heroSubtitle      String?  @default("أسعار الصرف الحية") // النص تحت العنوان
+  heroSubtitleAr    String?  @default("أسعار الصرف الحية")
+  heroSubtitleEn    String?  @default("Live Exchange Rates")
+  logoUrl           String?  // رابط الشعار
+  logoSizes         Json?    // { header, footer, loading } ارتفاع الشعار بالبكسل لكل موضع
+  /// مدة دورة شريط النشرة فوق الترويسة (ثوانٍ؛ أقل = أسرع)
+  tickerMarqueeDurationSec Int @default(42)
+  lastUpdate        DateTime @default(now())
+  
+  // إعدادات جلب الأسعار من SP Today
+  autoUpdateEnabled Boolean  @default(true)   // تفعيل التحديث التلقائي
+  updateInterval    Int      @default(6)      // فترة التحديث بالساعات
+  adjustmentAmount  Int      @default(250)    // مبلغ التعديل (ليرة سورية)
+  adjustmentType    String   @default("deduction") // نوع التعديل: deduction أو addition
+  lastFetchTime     DateTime?                 // آخر مرة تم جلب الأسعار
+  syncConfig        Json?                     // إعدادات المزامنة لكل فئة (فترة، نسبة/ثابت، آخر جلب)
+
+  // إعدادات الألوان - الوضع النهاري
+  lightPrimaryColor String?  @default("#0ea5e9")  // اللون الأساسي
+  lightAccentColor  String?  @default("#0284c7")  // اللون المميز
+  lightBgColor      String?  @default("#ffffff")  // لون الخلفية
+  
+  // إعدادات الألوان - الوضع الليلي
+  darkPrimaryColor  String?  @default("#0ea5e9")  // اللون الأساسي
+  darkAccentColor   String?  @default("#38bdf8")  // اللون المميز
+  darkBgColor       String?  @default("#0f172a")  // لون الخلفية
+}

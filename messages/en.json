@@ -1,0 +1,131 @@
+{
+  "site": {
+    "title": "Syrian Pound Rate",
+    "headerTitle": "Syrian Pound Rate Today",
+    "description": "Live Exchange Rates",
+    "copyright": "Syrian Pound Rate - All Rights Reserved"
+  },
+  "header": {
+    "lastUpdate": "Last Update",
+    "refresh": "Refresh"
+  },
+  "tabs": {
+    "currencies": "Currencies",
+    "gold": "Gold",
+    "fuel": "Fuel"
+  },
+  "gold": {
+    "title": "Global Gold Price",
+    "ounceUsd": "Ounce (USD)",
+    "gramUsd": "Gram (USD)",
+    "gramSyp": "Gram (SYP)",
+    "lastUpdate": "Last Update"
+  },
+  "fuel": {
+    "title": "Fuel Prices",
+    "pricePerUnit": "Price / Unit",
+    "lastUpdate": "Last Update"
+  },
+  "currency": {
+    "buyRate": "Buy Rate",
+    "sellRate": "Sell Rate",
+    "syp": "Syrian Pounds",
+    "shareRate": "Share",
+    "shareSuccess": "Share sheet opened",
+    "shareDownloaded": "Image downloaded",
+    "shareError": "Could not create or share the image",
+    "sharePromo": "See the latest Syrian pound exchange rates against foreign currencies",
+    "shareReadyTitle": "Image ready to share",
+    "shareReadyDescription": "On mobile, the browser needs a second tap to open WhatsApp and other apps. Tap “Open share” then pick an app.",
+    "shareOpenSheet": "Open share",
+    "shareDownloadOnly": "Download image",
+    "shareDialogCancel": "Cancel"
+  },
+  "calculator": {
+    "title": "Currency Converter",
+    "amount": "Amount",
+    "currency": "Currency",
+    "operation": "Operation",
+    "toSyp": "To SYP",
+    "fromSyp": "From SYP",
+    "result": "Result"
+  },
+  "admin": {
+    "title": "Admin Panel",
+    "description": "Manage Exchange Rates & Gold Price",
+    "login": "Login",
+    "logout": "Logout",
+    "username": "Username",
+    "password": "Password",
+    "usernamePlaceholder": "Enter username",
+    "passwordPlaceholder": "Enter password",
+    "loginButton": "Login",
+    "backToHome": "Back to Home",
+    "goldManagement": "Gold Price Management",
+    "currentPrice": "Current Price",
+    "perOunce": "Per Ounce",
+    "autoUpdate": "Auto Update from Provider",
+    "orManual": "Or enter price manually",
+    "ouncePriceUsd": "Ounce Price (USD)",
+    "gramPriceUsd": "Gram Price (USD)",
+    "saveGold": "Save Gold Price",
+    "exchangeManagement": "Exchange Rates Management",
+    "fuelManagement": "Fuel Prices Management",
+    "stats": "Quick Stats",
+    "currencyCount": "Currencies",
+    "usdRate": "USD Rate",
+    "eurRate": "EUR Rate",
+    "tryRate": "TRY Rate",
+    "save": "Save"
+  },
+  "currencies": {
+    "USD": "US Dollar",
+    "EUR": "Euro",
+    "TRY": "Turkish Lira",
+    "SAR": "Saudi Riyal",
+    "AED": "UAE Dirham",
+    "GBP": "British Pound",
+    "CHF": "Swiss Franc",
+    "CAD": "Canadian Dollar",
+    "AUD": "Australian Dollar",
+    "JOD": "Jordanian Dinar"
+  },
+  "fuels": {
+    "GASOLINE_95": "Gasoline 95",
+    "GASOLINE_98": "Gasoline 98",
+    "DIESEL": "Diesel",
+    "LPG": "LPG",
+    "KEROSENE": "Kerosene",
+    "MAZUT": "Mazut"
+  },
+  "newLira": {
+    "title": "New Lira",
+    "description": "New Syrian Pound prices (2 zeros removed)"
+  },
+  "footer": {
+    "privacy": "Privacy policy",
+    "about": "About us"
+  },
+  "rateDelta": {
+    "sinceLast": "vs last update",
+    "buyShort": "Buy",
+    "sellShort": "Sell",
+    "none": "—"
+  },
+  "seo": {
+    "homeHeading": "Syrian pound rate today",
+    "homeLead": "This page brings together the Syrian pound against major currencies, gold and fuel prices, plus global FX pairs and cryptocurrencies. Data is refreshed regularly from multiple sources for quick market context.",
+    "homeKeywords": "Syrian pound rate, SYP exchange, USD to SYP, gold price, fuel, crypto"
+  },
+  "legal": {
+    "privacyTitle": "Privacy policy",
+    "privacyP1": "We do not sell your personal data. We may collect minimal technical information (such as browser type) to improve performance.",
+    "privacyP2": "Prices and indicators shown here are approximate and indicative only; they may differ from real market rates or bureau rates—please verify with a trusted source before any financial decision.",
+    "privacyP3": "By using the site you agree to this policy. For questions, use contact channels if we publish them later on the site.",
+    "aboutTitle": "About us",
+    "aboutP1": "“Syrian Pound Rate” is an Arabic-first dashboard that groups SYP exchange indicators, gold, fuel, and crypto prices in one readable layout for phone and desktop.",
+    "aboutP2": "We aggregate public data and specialist sites, with optional sync and adjustments from the admin panel. The goal is a quick market snapshot, not financial advice.",
+    "aboutP3": "Numbers are reference values and may lag the live market; always check official or bureau rates when it matters.",
+    "backHome": "Back to home"
+  }
+}

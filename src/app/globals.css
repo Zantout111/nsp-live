@@ -1,0 +1,934 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-cairo), system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  
+  /* Custom accent colors for theming */
+  --color-accent-primary: var(--accent-primary);
+  --color-accent-primary-foreground: var(--accent-primary-foreground);
+  --color-accent-secondary: var(--accent-secondary);
+  --color-accent-secondary-foreground: var(--accent-secondary-foreground);
+}
+
+/* Light Mode — سماء صافية وبطاقات ورقية */
+:root {
+  --radius: 0.875rem;
+  --background: oklch(0.985 0.014 235);
+  --foreground: oklch(0.22 0.045 260);
+  --card: oklch(1 0.01 235 / 0.94);
+  --card-foreground: oklch(0.2 0.04 260);
+  --popover: oklch(1 0.012 235 / 0.97);
+  --popover-foreground: oklch(0.2 0.04 260);
+  --primary: oklch(0.52 0.19 245);
+  --primary-foreground: oklch(0.99 0.01 235);
+  --secondary: oklch(0.94 0.035 235);
+  --secondary-foreground: oklch(0.28 0.06 260);
+  --muted: oklch(0.945 0.025 235);
+  --muted-foreground: oklch(0.46 0.03 250);
+  --accent: oklch(0.93 0.05 235);
+  --accent-foreground: oklch(0.26 0.07 260);
+  --destructive: oklch(0.55 0.2 25);
+  --border: oklch(0.87 0.04 235 / 0.65);
+  --input: oklch(0.9 0.03 235 / 0.85);
+  --ring: oklch(0.52 0.19 245);
+  --chart-1: oklch(0.55 0.18 200);
+  --chart-2: oklch(0.6 0.12 180);
+  --chart-3: oklch(0.65 0.15 220);
+  --chart-4: oklch(0.7 0.1 190);
+  --chart-5: oklch(0.75 0.12 210);
+  --sidebar: oklch(0.98 0.01 200);
+  --sidebar-foreground: oklch(0.15 0 0);
+  --sidebar-primary: oklch(0.55 0.2 200);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.94 0.04 200);
+  --sidebar-accent-foreground: oklch(0.2 0.05 200);
+  --sidebar-border: oklch(0.9 0.02 200);
+  --sidebar-ring: oklch(0.55 0.2 200);
+  
+  /* Neon Colors */
+  --neon-cyan: #00f5ff;
+  --neon-blue: #0ea5e9;
+  --neon-purple: #a855f7;
+  --neon-gold: #ffd700;
+  
+  /* Custom accent colors - Sky Blue */
+  --accent-primary: oklch(0.55 0.18 200);
+  --accent-primary-foreground: oklch(1 0 0);
+  --accent-secondary: oklch(0.65 0.15 200);
+  --accent-secondary-foreground: oklch(0.2 0.02 200);
+}
+
+/* Dark Mode — SP Today–style (صفحة الجمهور) */
+.dark {
+  --background: #0f172a;
+  --foreground: #f1f5f9;
+  --card: #1e293b;
+  --card-foreground: #f1f5f9;
+  --popover: #1e293b;
+  --popover-foreground: #f1f5f9;
+  --primary: #3b82f6;
+  --primary-foreground: #ffffff;
+  --secondary: #334155;
+  --secondary-foreground: #f1f5f9;
+  --muted: #334155;
+  --muted-foreground: #94a3b8;
+  --accent: #334155;
+  --accent-foreground: #f1f5f9;
+  --destructive: #ef4444;
+  --border: #334155;
+  --input: #334155;
+  --ring: #3b82f6;
+  --chart-1: #3b82f6;
+  --chart-2: #10b981;
+  --chart-3: #f59e0b;
+  --chart-4: #8b5cf6;
+  --chart-5: #ec4899;
+  --sidebar: #0f172a;
+  --sidebar-foreground: #f1f5f9;
+  --sidebar-primary: #3b82f6;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #1e293b;
+  --sidebar-accent-foreground: #f1f5f9;
+  --sidebar-border: #334155;
+  --sidebar-ring: #3b82f6;
+
+  --neon-cyan: #38bdf8;
+  --neon-blue: #3b82f6;
+  --neon-purple: #818cf8;
+  --neon-gold: #fbbf24;
+
+  --accent-primary: #3b82f6;
+  --accent-primary-foreground: #ffffff;
+  --accent-secondary: #60a5fa;
+  --accent-secondary-foreground: #0f172a;
+}
+
+/* لوحة التحكم — وضع نهاري: خلفية فاتحة وحدود أوضح */
+html:not(.dark) .admin-panel {
+  --background: oklch(0.985 0.012 250);
+  --foreground: oklch(0.22 0.03 260);
+  --card: oklch(1 0 0 / 0.98);
+  --card-foreground: oklch(0.22 0.03 260);
+  --popover: oklch(1 0 0 / 0.99);
+  --popover-foreground: oklch(0.22 0.03 260);
+  --primary: oklch(0.52 0.17 245);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.96 0.02 250);
+  --secondary-foreground: oklch(0.28 0.03 260);
+  --muted: oklch(0.96 0.015 250);
+  --muted-foreground: oklch(0.45 0.02 260);
+  --accent: oklch(0.94 0.03 245);
+  --accent-foreground: oklch(0.25 0.04 260);
+  --destructive: oklch(0.55 0.22 25);
+  --border: oklch(0.88 0.02 250);
+  --input: oklch(0.92 0.015 250);
+  --ring: oklch(0.52 0.17 245);
+  --sidebar: oklch(0.98 0.01 250);
+  --sidebar-foreground: oklch(0.22 0.03 260);
+  --sidebar-primary: oklch(0.52 0.17 245);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.94 0.02 250);
+  --sidebar-accent-foreground: oklch(0.22 0.03 260);
+  --sidebar-border: oklch(0.9 0.02 250);
+  --sidebar-ring: oklch(0.52 0.17 245);
+  background: var(--background);
+  color: var(--foreground);
+}
+
+/* لوحة التحكم — وضع ليلي: ذهبي هادئ وتباين مريح */
+html.dark .admin-panel {
+  --background: oklch(0.1 0.015 260);
+  --foreground: oklch(0.97 0.01 260);
+  --card: oklch(0.15 0.018 265 / 0.92);
+  --card-foreground: oklch(0.97 0.01 260);
+  --popover: oklch(0.16 0.02 265 / 0.96);
+  --popover-foreground: oklch(0.97 0.01 260);
+  --primary: oklch(0.76 0.14 72);
+  --primary-foreground: oklch(0.14 0.02 260);
+  --secondary: oklch(0.22 0.02 70);
+  --secondary-foreground: oklch(0.97 0.01 260);
+  --muted: oklch(0.22 0.015 260);
+  --muted-foreground: oklch(0.72 0.02 260);
+  --accent: oklch(0.24 0.025 70);
+  --accent-foreground: oklch(0.97 0.01 260);
+  --destructive: oklch(0.58 0.2 25);
+  --border: oklch(0.28 0.02 70 / 0.55);
+  --input: oklch(0.28 0.02 70 / 0.55);
+  --ring: oklch(0.76 0.14 72);
+  --sidebar: oklch(0.09 0.01 260);
+  --sidebar-foreground: oklch(0.97 0.01 260);
+  --sidebar-primary: oklch(0.76 0.14 72);
+  --sidebar-primary-foreground: oklch(0.14 0.02 260);
+  --sidebar-accent: oklch(0.24 0.03 70);
+  --sidebar-accent-foreground: oklch(0.97 0.01 260);
+  --sidebar-border: oklch(0.28 0.02 70);
+  --sidebar-ring: oklch(0.76 0.14 72);
+  background: var(--background);
+  color: var(--foreground);
+}
+
+.admin-panel {
+  min-height: 100vh;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: var(--font-cairo), system-ui, sans-serif;
+  }
+  ::selection {
+    background: oklch(0.55 0.15 245 / 0.22);
+    color: inherit;
+  }
+  .dark ::selection {
+    background: oklch(0.62 0.14 245 / 0.35);
+  }
+}
+
+/* سطح الصفحة الرئيسية — تدرجات خفيفة للعمق */
+.home-surface {
+  background-color: var(--background);
+  background-image:
+    radial-gradient(ellipse 110% 55% at 50% -18%, oklch(0.93 0.055 238 / 0.6), transparent 52%),
+    radial-gradient(ellipse 65% 42% at 100% 8%, oklch(0.94 0.045 225 / 0.38), transparent 50%),
+    radial-gradient(ellipse 50% 38% at 0% 85%, oklch(0.96 0.028 250 / 0.45), transparent 48%);
+}
+.dark .home-surface {
+  background-image:
+    radial-gradient(ellipse 95% 50% at 50% -12%, oklch(0.38 0.09 250 / 0.28), transparent 58%),
+    radial-gradient(ellipse 55% 38% at 95% 15%, oklch(0.34 0.08 265 / 0.22), transparent 52%);
+}
+
+/* بطاقات مرتفعة — ظل ناعم */
+.surface-card {
+  @apply rounded-2xl border border-border/80 bg-card transition-shadow duration-300;
+  box-shadow:
+    0 1px 2px oklch(0.2 0.02 260 / 0.04),
+    0 4px 16px oklch(0.2 0.04 250 / 0.06);
+}
+.dark .surface-card {
+  @apply border-slate-700/90 bg-slate-800/50;
+  box-shadow:
+    0 1px 0 oklch(1 0 0 / 0.04) inset,
+    0 8px 28px oklch(0 0 0 / 0.35);
+}
+.surface-card:hover {
+  box-shadow:
+    0 2px 4px oklch(0.2 0.02 260 / 0.06),
+    0 12px 32px oklch(0.25 0.06 245 / 0.1);
+}
+.dark .surface-card:hover {
+  box-shadow:
+    0 1px 0 oklch(1 0 0 / 0.05) inset,
+    0 12px 40px oklch(0 0 0 / 0.45);
+}
+
+/* خلفيات أقسام — طابع مالي خفيف جداً (نهاري / ليلي) */
+.section-bg-hero {
+  isolation: isolate;
+}
+.section-bg-hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.18;
+  background-image: repeating-linear-gradient(
+    122deg,
+    transparent,
+    transparent 68px,
+    oklch(0.48 0.07 245 / 0.014) 68px,
+    oklch(0.48 0.07 245 / 0.014) 69px
+  );
+}
+.dark .section-bg-hero::after {
+  opacity: 0.1;
+  background-image: repeating-linear-gradient(
+    122deg,
+    transparent,
+    transparent 76px,
+    oklch(0.75 0.04 250 / 0.02) 76px,
+    oklch(0.75 0.04 250 / 0.02) 77px
+  );
+}
+
+/* لوحة الأسعار: وهج أزرق خفيف + خطوط أفقية تشبه سجل الأرقام */
+.section-bg-rates {
+  position: relative;
+  isolation: isolate;
+}
+.section-bg-rates::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.28;
+  background-image:
+    radial-gradient(ellipse 85% 42% at 50% 0%, oklch(0.94 0.035 242 / 0.22), transparent 58%),
+    repeating-linear-gradient(
+      180deg,
+      transparent,
+      transparent 26px,
+      oklch(0.42 0.05 245 / 0.018) 26px,
+      oklch(0.42 0.05 245 / 0.018) 27px
+    );
+}
+.dark .section-bg-rates::before {
+  opacity: 0.17;
+  background-image:
+    radial-gradient(ellipse 80% 38% at 50% 0%, oklch(0.4 0.07 255 / 0.1), transparent 62%),
+    repeating-linear-gradient(
+      180deg,
+      transparent,
+      transparent 30px,
+      oklch(0.62 0.04 250 / 0.022) 30px,
+      oklch(0.62 0.04 250 / 0.022) 31px
+    );
+}
+
+/* الحاسبة: لمسة دافئة خفيفة (قيمة / تحويل) */
+.section-bg-calculator {
+  position: relative;
+  isolation: isolate;
+}
+.section-bg-calculator::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.26;
+  background-image:
+    radial-gradient(ellipse 60% 100% at 0% 40%, oklch(0.97 0.04 88 / 0.28), transparent 55%),
+    radial-gradient(ellipse 55% 95% at 100% 60%, oklch(0.94 0.035 245 / 0.18), transparent 52%);
+}
+.dark .section-bg-calculator::before {
+  opacity: 0.14;
+  background-image:
+    radial-gradient(ellipse 60% 100% at 0% 40%, oklch(0.38 0.05 82 / 0.07), transparent 55%),
+    radial-gradient(ellipse 55% 95% at 100% 60%, oklch(0.36 0.06 252 / 0.09), transparent 52%);
+}
+
+/* الفوتر: نمط نقاط خافت */
+.section-bg-footer {
+  position: relative;
+  isolation: isolate;
+}
+.section-bg-footer::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.35;
+  background-image: radial-gradient(
+    circle at 1.5px 1.5px,
+    oklch(0.45 0.03 250 / 0.06) 1px,
+    transparent 0
+  );
+  background-size: 28px 28px;
+}
+.dark .section-bg-footer::before {
+  opacity: 0.2;
+  background-image: radial-gradient(
+    circle at 1.5px 1.5px,
+    oklch(0.75 0.03 250 / 0.05) 1px,
+    transparent 0
+  );
+}
+
+/* RTL Support */
+[dir="rtl"] {
+  font-family: var(--font-cairo), system-ui, sans-serif;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, var(--neon-cyan), var(--neon-blue));
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, var(--neon-blue), var(--neon-purple));
+}
+
+/* ============================================
+   ANIMATED BACKGROUND - DISABLED
+   ============================================ */
+
+.animated-bg {
+  display: none;
+}
+
+/* Floating Orbs - Disabled */
+.orb {
+  display: none;
+}
+
+/* ============================================
+   GLASSMORPHISM CARDS
+   ============================================ */
+
+.glass-card {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.15) 0%,
+    rgba(255, 255, 255, 0.05) 50%,
+    rgba(255, 255, 255, 0.1) 100%
+  );
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 
+    0 8px 32px rgba(0, 0, 0, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.1);
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.dark .glass-card {
+  background: linear-gradient(
+    135deg,
+    rgba(30, 30, 40, 0.6) 0%,
+    rgba(20, 20, 30, 0.4) 50%,
+    rgba(25, 25, 35, 0.5) 100%
+  );
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 
+    0 8px 32px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.02);
+}
+
+.glass-card:hover {
+  transform: translateY(-4px) scale(1.02);
+  box-shadow: 
+    0 20px 40px rgba(0, 0, 0, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    0 0 30px rgba(0, 245, 255, 0.1);
+  border-color: rgba(0, 245, 255, 0.3);
+}
+
+.dark .glass-card:hover {
+  box-shadow: 
+    0 20px 40px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 0 30px rgba(251, 191, 36, 0.1);
+  border-color: rgba(251, 191, 36, 0.2);
+}
+
+/* Glass Card with Neon Border */
+.glass-card-neon {
+  position: relative;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.12) 0%,
+    rgba(255, 255, 255, 0.04) 50%,
+    rgba(255, 255, 255, 0.08) 100%
+  );
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border-radius: 1rem;
+  overflow: hidden;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-card-neon::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-radius: 1rem;
+  padding: 1px;
+  background: linear-gradient(
+    135deg,
+    rgba(0, 245, 255, 0.5) 0%,
+    rgba(14, 165, 233, 0.3) 25%,
+    rgba(168, 85, 247, 0.3) 50%,
+    rgba(14, 165, 233, 0.3) 75%,
+    rgba(0, 245, 255, 0.5) 100%
+  );
+  -webkit-mask: 
+    linear-gradient(#fff 0 0) content-box, 
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+.dark .glass-card-neon::before {
+  background: linear-gradient(
+    135deg,
+    rgba(251, 191, 36, 0.4) 0%,
+    rgba(0, 245, 255, 0.2) 25%,
+    rgba(168, 85, 247, 0.2) 50%,
+    rgba(0, 245, 255, 0.2) 75%,
+    rgba(251, 191, 36, 0.4) 100%
+  );
+}
+
+.glass-card-neon:hover {
+  transform: translateY(-6px);
+  box-shadow: 
+    0 25px 50px rgba(0, 0, 0, 0.2),
+    0 0 40px rgba(0, 245, 255, 0.15);
+}
+
+.dark .glass-card-neon:hover {
+  box-shadow: 
+    0 25px 50px rgba(0, 0, 0, 0.4),
+    0 0 40px rgba(251, 191, 36, 0.15);
+}
+
+/* ============================================
+   NEON EFFECTS
+   ============================================ */
+
+.neon-text {
+  /* Text shadow removed */
+}
+
+.neon-text-subtle {
+  /* Text shadow removed - clean text */
+}
+
+.dark .neon-text-subtle {
+  /* Text shadow removed - clean text */
+}
+
+.neon-border {
+  box-shadow: 
+    0 0 5px var(--neon-cyan),
+    0 0 10px var(--neon-cyan),
+    inset 0 0 5px rgba(0, 245, 255, 0.1);
+  border: 1px solid var(--neon-cyan);
+}
+
+.dark .neon-border {
+  box-shadow: 
+    0 0 5px var(--neon-gold),
+    0 0 10px var(--neon-gold),
+    inset 0 0 5px rgba(251, 191, 36, 0.1);
+  border: 1px solid var(--neon-gold);
+}
+
+.neon-glow {
+  position: relative;
+}
+
+.neon-glow::after {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  right: -2px;
+  bottom: -2px;
+  border-radius: inherit;
+  background: linear-gradient(45deg, var(--neon-cyan), var(--neon-blue), var(--neon-purple), var(--neon-cyan));
+  background-size: 400% 400%;
+  animation: gradientShift 8s ease infinite;
+  z-index: -1;
+  filter: blur(15px);
+  opacity: 0.5;
+}
+
+.dark .neon-glow::after {
+  background: linear-gradient(45deg, var(--neon-gold), var(--neon-cyan), var(--neon-purple), var(--neon-gold));
+  background-size: 400% 400%;
+}
+
+/* Neon Button */
+.neon-button {
+  position: relative;
+  background: linear-gradient(135deg, rgba(0, 245, 255, 0.1), rgba(14, 165, 233, 0.1));
+  border: 1px solid rgba(0, 245, 255, 0.5);
+  color: var(--neon-cyan);
+  transition: all 0.3s ease;
+  overflow: hidden;
+}
+
+.neon-button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(0, 245, 255, 0.3), transparent);
+  transition: left 0.5s ease;
+}
+
+.neon-button:hover::before {
+  left: 100%;
+}
+
+.neon-button:hover {
+  box-shadow: 
+    0 0 10px rgba(0, 245, 255, 0.4),
+    0 0 20px rgba(0, 245, 255, 0.2),
+    0 0 30px rgba(0, 245, 255, 0.1);
+  border-color: var(--neon-cyan);
+}
+
+.dark .neon-button {
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.1), rgba(168, 85, 247, 0.1));
+  border: 1px solid rgba(251, 191, 36, 0.5);
+  color: var(--neon-gold);
+}
+
+.dark .neon-button::before {
+  background: linear-gradient(90deg, transparent, rgba(251, 191, 36, 0.3), transparent);
+}
+
+.dark .neon-button:hover {
+  box-shadow: 
+    0 0 10px rgba(251, 191, 36, 0.4),
+    0 0 20px rgba(251, 191, 36, 0.2),
+    0 0 30px rgba(251, 191, 36, 0.1);
+  border-color: var(--neon-gold);
+}
+
+/* ============================================
+   SPECIAL CARD STYLES
+   ============================================ */
+
+.hero-card {
+  position: relative;
+  background: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.2) 0%,
+    rgba(255, 255, 255, 0.05) 100%
+  );
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 1.25rem;
+  overflow: hidden;
+  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.dark .hero-card {
+  background: linear-gradient(
+    145deg,
+    rgba(40, 40, 50, 0.5) 0%,
+    rgba(20, 20, 30, 0.3) 100%
+  );
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.hero-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(0, 245, 255, 0.5), transparent);
+}
+
+.dark .hero-card::before {
+  background: linear-gradient(90deg, transparent, rgba(251, 191, 36, 0.5), transparent);
+}
+
+.hero-card::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 60%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(168, 85, 247, 0.3), transparent);
+}
+
+.hero-card:hover {
+  transform: translateY(-8px) scale(1.02);
+  box-shadow: 
+    0 30px 60px rgba(0, 0, 0, 0.2),
+    0 0 40px rgba(0, 245, 255, 0.1);
+}
+
+.dark .hero-card:hover {
+  box-shadow: 
+    0 30px 60px rgba(0, 0, 0, 0.4),
+    0 0 40px rgba(251, 191, 36, 0.1);
+}
+
+/* Gold Card Special */
+.gold-card {
+  background: linear-gradient(
+    145deg,
+    rgba(251, 191, 36, 0.15) 0%,
+    rgba(168, 85, 247, 0.08) 50%,
+    rgba(251, 191, 36, 0.1) 100%
+  );
+  border: 1px solid rgba(251, 191, 36, 0.3);
+}
+
+.dark .gold-card {
+  background: linear-gradient(
+    145deg,
+    rgba(251, 191, 36, 0.1) 0%,
+    rgba(168, 85, 247, 0.05) 50%,
+    rgba(251, 191, 36, 0.08) 100%
+  );
+  border: 1px solid rgba(251, 191, 36, 0.2);
+}
+
+.gold-card:hover {
+  box-shadow: 
+    0 20px 40px rgba(251, 191, 36, 0.15),
+    0 0 30px rgba(251, 191, 36, 0.1);
+}
+
+/* ============================================
+   TICKER BAR STYLES
+   ============================================ */
+
+/* شريط التذاكر — فاتح: تدرج زهري-أزرق هادئ | داكن: SP Today */
+.ticker-bar {
+  background: linear-gradient(
+    180deg,
+    oklch(0.94 0.045 235) 0%,
+    oklch(0.91 0.05 240) 100%
+  );
+  border-bottom: 1px solid oklch(0.82 0.06 235 / 0.45);
+  box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.65);
+}
+
+.dark .ticker-bar {
+  background: #0b1220;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: none;
+}
+
+/* ماركيز لانهائي: مسار واحد أفقي بلا التفاف (نشرة أخبار) */
+.ticker-marquee-track {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  width: max-content;
+  animation: ticker-marquee var(--ticker-marquee-duration, 42s) linear infinite;
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ticker-marquee-track {
+    animation: none;
+  }
+}
+
+@keyframes ticker-marquee {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+/* ============================================
+   HEADER STYLES
+   ============================================ */
+
+.glass-header {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.8) 0%,
+    rgba(255, 255, 255, 0.6) 100%
+  );
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.dark .glass-header {
+  background: linear-gradient(
+    180deg,
+    rgba(20, 20, 30, 0.8) 0%,
+    rgba(15, 15, 25, 0.6) 100%
+  );
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* هيدر الصفحة العامة الشفاف فوق التدرج */
+.spt-header {
+  background: transparent;
+  border-bottom: none;
+}
+
+/* ============================================
+   TABS STYLES
+   ============================================ */
+
+.glass-tabs {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.1) 0%,
+    rgba(255, 255, 255, 0.05) 100%
+  );
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 0.75rem;
+}
+
+.dark .glass-tabs {
+  background: linear-gradient(
+    135deg,
+    rgba(30, 30, 40, 0.5) 0%,
+    rgba(20, 20, 30, 0.3) 100%
+  );
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.tab-trigger {
+  position: relative;
+  transition: all 0.3s ease;
+}
+
+.tab-trigger[data-state="active"] {
+  background: linear-gradient(135deg, rgba(0, 245, 255, 0.2), rgba(14, 165, 233, 0.1));
+  box-shadow: 0 0 15px rgba(0, 245, 255, 0.2);
+}
+
+.dark .tab-trigger[data-state="active"] {
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.2), rgba(168, 85, 247, 0.1));
+  box-shadow: 0 0 15px rgba(251, 191, 36, 0.2);
+}
+
+/* ============================================
+   ANIMATIONS
+   ============================================ */
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.5s ease-out forwards;
+}
+
+.animate-shimmer {
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  background-size: 200% 100%;
+  animation: shimmer 2s infinite;
+}
+
+/* Stagger animation delays */
+.stagger-1 { animation-delay: 0.1s; }
+.stagger-2 { animation-delay: 0.2s; }
+.stagger-3 { animation-delay: 0.3s; }
+.stagger-4 { animation-delay: 0.4s; }
+
+/* Number formatting for Arabic */
+.number-ar {
+  font-feature-settings: "ss01";
+}
+
+/* ============================================
+   PRICE CHANGE INDICATORS
+   ============================================ */
+
+.price-up {
+  color: #22c55e;
+}
+
+.price-down {
+  color: #ef4444;
+}
+
+/* ============================================
+   RESPONSIVE ADJUSTMENTS
+   ============================================ */
+
+@media (max-width: 640px) {
+  .glass-card, .glass-card-neon, .hero-card {
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+  }
+  
+  .orb {
+    display: none;
+  }
+}
+
+/* تمرير أفقي لعلامات التبويب دون شريط مرئي على الجوال */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}

@@ -1,0 +1,62 @@
+import { PrismaClient } from '@prisma/client'
+
+// Singleton Prisma client with all models including FuelPrice, ForexRate, CryptoRate
+const globalForPrisma = globalThis as unknown as {
+  prisma: PrismaClient | undefined
+}
+
+// Create new Prisma client instance with fresh connection
+const createPrismaClient = () => {
+  return new PrismaClient({
+    log: ['query'],
+  })
+}
+
+// Always create a new client in development to pick up schema changes
+export const db = process.env.NODE_ENV === 'production' 
+  ? (globalForPrisma.prisma ?? createPrismaClient())
+  : createPrismaClient()
+
+if (process.env.NODE_ENV === 'production') globalForPrisma.prisma = db
+
+let sqliteSchemaEnsured = false;
+
+/**
+ * إذا بقي ملف SQLite قديماً دون عمود جديد، تفشل قراءة SiteSettings ولا تُحمَّل الأسعار.
+ * يُستدعى مرة قبل استعلامات الإعدادات.
+ */
+export async function ensureSqliteSchema(): Promise<void> {
+  if (sqliteSchemaEnsured) return;
+  const url = process.env.DATABASE_URL ?? '';
+  if (!url.includes('sqlite') && !url.includes('file:')) {
+    sqliteSchemaEnsured = true;
+    return;
+  }
+  const tryAlter = async (sql: string) => {
+    try {
+      await db.$executeRawUnsafe(sql);
+    } catch (e: unknown) {
+      const m = e instanceof Error ? e.message : String(e);
+      if (!/duplicate column|already exists/i.test(m)) {
+        console.warn('[db] ensureSqliteSchema:', m);
+      }
+    }
+  };
+
+  await tryAlter(
+    `ALTER TABLE SiteSettings ADD COLUMN tickerMarqueeDurationSec INTEGER NOT NULL DEFAULT 42`
+  );
+
+  await tryAlter(`ALTER TABLE ExchangeRate ADD COLUMN prevBuyRate REAL`);
+  await tryAlter(`ALTER TABLE ExchangeRate ADD COLUMN prevSellRate REAL`);
+  await tryAlter(`ALTER TABLE ExchangeRate ADD COLUMN prevCapturedAt DATETIME`);
+
+  await tryAlter(`ALTER TABLE GoldPrice ADD COLUMN prevPriceUsd REAL`);
+  await tryAlter(`ALTER TABLE GoldPrice ADD COLUMN prevPricePerGram REAL`);
+  await tryAlter(`ALTER TABLE GoldPrice ADD COLUMN prevCapturedAt DATETIME`);
+
+  await tryAlter(`ALTER TABLE FuelPrice ADD COLUMN prevPrice REAL`);
+  await tryAlter(`ALTER TABLE FuelPrice ADD COLUMN prevCapturedAt DATETIME`);
+
+  sqliteSchemaEnsured = true;
+}

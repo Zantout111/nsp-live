@@ -1,0 +1,131 @@
+{
+  "site": {
+    "title": "Taux de Livre Syrienne",
+    "headerTitle": "Taux de Livre Syrienne Aujourd'hui",
+    "description": "Taux de Change en Direct",
+    "copyright": "Taux de Livre Syrienne - Tous Droits Réservés"
+  },
+  "header": {
+    "lastUpdate": "Dernière Mise à Jour",
+    "refresh": "Actualiser"
+  },
+  "tabs": {
+    "currencies": "Devises",
+    "gold": "Or",
+    "fuel": "Carburant"
+  },
+  "gold": {
+    "title": "Prix de l'Or Mondial",
+    "ounceUsd": "Once (USD)",
+    "gramUsd": "Gramme (USD)",
+    "gramSyp": "Gramme (SYP)",
+    "lastUpdate": "Dernière Mise à Jour"
+  },
+  "fuel": {
+    "title": "Prix des Carburants",
+    "pricePerUnit": "Prix / Unité",
+    "lastUpdate": "Dernière Mise à Jour"
+  },
+  "currency": {
+    "buyRate": "Taux d'Achat",
+    "sellRate": "Taux de Vente",
+    "syp": "Livres Syriennes",
+    "shareRate": "Partager",
+    "shareSuccess": "Fenêtre de partage ouverte",
+    "shareDownloaded": "Image téléchargée",
+    "shareError": "Impossible de créer ou partager l'image",
+    "sharePromo": "Découvrez les derniers taux de change de la livre syrienne face aux devises étrangères",
+    "shareReadyTitle": "Image prête à partager",
+    "shareReadyDescription": "Sur mobile, le navigateur demande souvent une seconde pression pour WhatsApp, etc. Appuyez sur « Ouvrir le partage » puis choisissez une application.",
+    "shareOpenSheet": "Ouvrir le partage",
+    "shareDownloadOnly": "Télécharger l’image",
+    "shareDialogCancel": "Annuler"
+  },
+  "calculator": {
+    "title": "Convertisseur de Devise",
+    "amount": "Montant",
+    "currency": "Devise",
+    "operation": "Opération",
+    "toSyp": "Vers SYP",
+    "fromSyp": "De SYP",
+    "result": "Résultat"
+  },
+  "admin": {
+    "title": "Panneau d'Administration",
+    "description": "Gérer les Taux de Change & Prix de l'Or",
+    "login": "Connexion",
+    "logout": "Déconnexion",
+    "username": "Nom d'utilisateur",
+    "password": "Mot de passe",
+    "usernamePlaceholder": "Entrez le nom d'utilisateur",
+    "passwordPlaceholder": "Entrez le mot de passe",
+    "loginButton": "Se Connecter",
+    "backToHome": "Retour à l'Accueil",
+    "goldManagement": "Gestion du Prix de l'Or",
+    "currentPrice": "Prix Actuel",
+    "perOunce": "Par Once",
+    "autoUpdate": "Mise à Jour Auto du Fournisseur",
+    "orManual": "Ou entrez le prix manuellement",
+    "ouncePriceUsd": "Prix de l'Once (USD)",
+    "gramPriceUsd": "Prix du Gramme (USD)",
+    "saveGold": "Enregistrer le Prix de l'Or",
+    "exchangeManagement": "Gestion des Taux de Change",
+    "fuelManagement": "Gestion des Prix des Carburants",
+    "stats": "Statistiques Rapides",
+    "currencyCount": "Devises",
+    "usdRate": "Taux USD",
+    "eurRate": "Taux EUR",
+    "tryRate": "Taux TRY",
+    "save": "Enregistrer"
+  },
+  "currencies": {
+    "USD": "Dollar Américain",
+    "EUR": "Euro",
+    "TRY": "Livre Turque",
+    "SAR": "Riyal Saoudien",
+    "AED": "Dirham EAU",
+    "GBP": "Livre Britannique",
+    "CHF": "Franc Suisse",
+    "CAD": "Dollar Canadien",
+    "AUD": "Dollar Australien",
+    "JOD": "Dinar Jordanien"
+  },
+  "fuels": {
+    "GASOLINE_95": "Essence 95",
+    "GASOLINE_98": "Essence 98",
+    "DIESEL": "Diesel",
+    "LPG": "LPG",
+    "KEROSENE": "Kérosène",
+    "MAZUT": "Mazout"
+  },
+  "newLira": {
+    "title": "Nouvelle Livre",
+    "description": "Prix de la nouvelle livre syrienne (2 zéros supprimés)"
+  },
+  "footer": {
+    "privacy": "Politique de confidentialité",
+    "about": "À propos"
+  },
+  "rateDelta": {
+    "sinceLast": "Depuis la dernière mise à jour",
+    "buyShort": "Achat",
+    "sellShort": "Vente",
+    "none": "—"
+  },
+  "seo": {
+    "homeHeading": "Cours de la livre syrienne aujourd’hui",
+    "homeLead": "Cette page regroupe le cours indicatif de la livre syrienne face aux principales devises, les prix de l’or et des carburants, ainsi qu’un aperçu des marchés mondiaux et des cryptomonnaies. Les données sont actualisées régulièrement à partir de sources multiples.",
+    "homeKeywords": "cours livre syrienne aujourd’hui, change SYP, dollar livre syrienne, prix de l’or, carburants, cryptomonnaies"
+  },
+  "legal": {
+    "privacyTitle": "Politique de confidentialité",
+    "privacyP1": "Nous ne vendons pas vos données personnelles. Nous pouvons collecter des informations techniques minimales (par ex. type de navigateur) pour améliorer les performances du site.",
+    "privacyP2": "Les prix et indicateurs affichés sont approximatifs et à titre indicatif ; ils peuvent différer des taux réels du marché ou des bureaux de change — vérifiez toujours une source fiable avant toute décision financière.",
+    "privacyP3": "En utilisant le site, vous acceptez cette politique. Pour toute question, utilisez les moyens de contact publiés sur le site lorsqu’ils sont disponibles.",
+    "aboutTitle": "À propos",
+    "aboutP1": "« Taux de Livre Syrienne » est un tableau de bord (priorité arabe) qui regroupe les indicateurs de change du SYP, l’or, les carburants et les cryptomonnaies dans une interface lisible sur mobile et ordinateur.",
+    "aboutP2": "Nous agrégeons des données publiques et des sites spécialisés, avec synchronisation et ajustements possibles depuis l’administration. L’objectif est un aperçu rapide du marché, pas un conseil financier.",
+    "aboutP3": "Les chiffres sont indicatifs et peuvent être en retard sur le marché en temps réel ; consultez les sources officielles ou un bureau de change lorsque c’est important.",
+    "backHome": "Retour à l’accueil"
+  }
+}

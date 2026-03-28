@@ -1,0 +1,131 @@
+{
+  "site": {
+    "title": "Syrisches Pfund Rate",
+    "headerTitle": "Syrisches Pfund Kurs Heute",
+    "description": "Live-Wechselkurse",
+    "copyright": "Syrisches Pfund Rate - Alle Rechte vorbehalten"
+  },
+  "header": {
+    "lastUpdate": "Letzte Aktualisierung",
+    "refresh": "Aktualisieren"
+  },
+  "tabs": {
+    "currencies": "Währungen",
+    "gold": "Gold",
+    "fuel": "Kraftstoff"
+  },
+  "gold": {
+    "title": "Globaler Goldpreis",
+    "ounceUsd": "Unze (USD)",
+    "gramUsd": "Gramm (USD)",
+    "gramSyp": "Gramm (SYP)",
+    "lastUpdate": "Letzte Aktualisierung"
+  },
+  "fuel": {
+    "title": "Kraftstoffpreise",
+    "pricePerUnit": "Preis / Einheit",
+    "lastUpdate": "Letzte Aktualisierung"
+  },
+  "currency": {
+    "buyRate": "Kaufkurs",
+    "sellRate": "Verkaufskurs",
+    "syp": "Syrische Pfund",
+    "shareRate": "Teilen",
+    "shareSuccess": "Teilen-Dialog geöffnet",
+    "shareDownloaded": "Bild heruntergeladen",
+    "shareError": "Bild konnte nicht erstellt oder geteilt werden",
+    "sharePromo": "Aktuelle Wechselkurse der syrischen Lira gegenüber ausländischen Währungen",
+    "shareReadyTitle": "Bild zum Teilen bereit",
+    "shareReadyDescription": "Auf dem Handy benötigt der Browser oft einen zweiten Tipp für WhatsApp & Co. Tippe auf „Teilen öffnen“ und wähle eine App.",
+    "shareOpenSheet": "Teilen öffnen",
+    "shareDownloadOnly": "Bild herunterladen",
+    "shareDialogCancel": "Abbrechen"
+  },
+  "calculator": {
+    "title": "Währungsrechner",
+    "amount": "Betrag",
+    "currency": "Währung",
+    "operation": "Operation",
+    "toSyp": "Zu SYP",
+    "fromSyp": "Von SYP",
+    "result": "Ergebnis"
+  },
+  "admin": {
+    "title": "Admin-Panel",
+    "description": "Wechselkurse & Goldpreis verwalten",
+    "login": "Anmelden",
+    "logout": "Abmelden",
+    "username": "Benutzername",
+    "password": "Passwort",
+    "usernamePlaceholder": "Benutzername eingeben",
+    "passwordPlaceholder": "Passwort eingeben",
+    "loginButton": "Anmelden",
+    "backToHome": "Zurück zur Startseite",
+    "goldManagement": "Goldpreis-Verwaltung",
+    "currentPrice": "Aktueller Preis",
+    "perOunce": "Pro Unze",
+    "autoUpdate": "Auto-Update vom Anbieter",
+    "orManual": "Oder Preis manuell eingeben",
+    "ouncePriceUsd": "Unzenpreis (USD)",
+    "gramPriceUsd": "Grammpreis (USD)",
+    "saveGold": "Goldpreis speichern",
+    "exchangeManagement": "Wechselkurs-Verwaltung",
+    "fuelManagement": "Kraftstoffpreise-Verwaltung",
+    "stats": "Schnellstatistik",
+    "currencyCount": "Währungen",
+    "usdRate": "USD-Kurs",
+    "eurRate": "EUR-Kurs",
+    "tryRate": "TRY-Kurs",
+    "save": "Speichern"
+  },
+  "currencies": {
+    "USD": "US-Dollar",
+    "EUR": "Euro",
+    "TRY": "Türkische Lira",
+    "SAR": "Saudi-Riyal",
+    "AED": "UAE-Dirham",
+    "GBP": "Britisches Pfund",
+    "CHF": "Schweizer Franken",
+    "CAD": "Kanadischer Dollar",
+    "AUD": "Australischer Dollar",
+    "JOD": "Jordanischer Dinar"
+  },
+  "fuels": {
+    "GASOLINE_95": "Benzin 95",
+    "GASOLINE_98": "Benzin 98",
+    "DIESEL": "Diesel",
+    "LPG": "LPG",
+    "KEROSENE": "Kerosin",
+    "MAZUT": "Masut"
+  },
+  "newLira": {
+    "title": "Neue Lira",
+    "description": "Neue syrische Pfund Preise (2 Nullen entfernt)"
+  },
+  "footer": {
+    "privacy": "Datenschutz",
+    "about": "Über uns"
+  },
+  "rateDelta": {
+    "sinceLast": "Seit letztem Update",
+    "buyShort": "Kauf",
+    "sellShort": "Verkauf",
+    "none": "—"
+  },
+  "seo": {
+    "homeHeading": "Syrisches Pfund Kurs heute",
+    "homeLead": "Diese Seite bündelt den Kurs des syrischen Pfunds zu wichtigen Währungen, Gold- und Kraftstoffpreise sowie einen Überblick über globale Devisenmärkte und Kryptowährungen. Die Daten werden regelmäßig aus mehreren Quellen aktualisiert.",
+    "homeKeywords": "Syrisches Pfund Kurs heute, SYP Wechselkurs, Dollar SYP, Goldpreis, Kraftstoff, Krypto"
+  },
+  "legal": {
+    "privacyTitle": "Datenschutz",
+    "privacyP1": "Wir verkaufen keine persönlichen Daten. Wir können minimale technische Informationen (z. B. Browsertyp) erheben, um die Leistung zu verbessern.",
+    "privacyP2": "Angezeigte Preise und Kennzahlen sind annähernd und nur zur Orientierung; sie können von Markt- oder Wechselstubenkursen abweichen — prüfen Sie verlässliche Quellen vor finanziellen Entscheidungen.",
+    "privacyP3": "Mit der Nutzung der Website stimmen Sie dieser Richtlinie zu. Bei Fragen nutzen Sie Kontaktmöglichkeiten, falls auf der Website veröffentlicht.",
+    "aboutTitle": "Über uns",
+    "aboutP1": "„Syrisches Pfund Rate“ ist ein Dashboard (arabisch zuerst), das SYP-Wechselkursindikatoren, Gold, Kraftstoff und Kryptopreise in einer übersichtlichen Oberfläche für Handy und Desktop zusammenführt.",
+    "aboutP2": "Wir bündeln öffentliche Daten und Fachseiten; Synchronisierung und Anpassungen sind über das Admin-Panel möglich. Ziel ist ein schneller Marktüberblick, keine Finanzberatung.",
+    "aboutP3": "Zahlen sind Referenzwerte und können dem Live-Markt hinterherhinken; bei Bedarf offizielle oder Wechselstuben-Kurse prüfen.",
+    "backHome": "Zur Startseite"
+  }
+}
