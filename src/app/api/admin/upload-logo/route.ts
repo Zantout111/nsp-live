@@ -1,7 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { existsSync } from 'fs';
 import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
 import { isAdminAuthenticated } from '@/lib/admin-session';
+
+/**
+ * مسار public الفعلي الذي يقرأ منه خادم Next في وضع standalone.
+ * عند التشغيل بـ `node .next/standalone/server.js` من جذر المشروع، cwd هو الجذر
+ * لكن الملفات الثابتة تُخدم من `.next/standalone/public` — الكتابة إلى `public/`
+ * في الجذر كانت تُخفي الشعار عن المتصفح.
+ */
+function resolvePublicUploadsDir(): string {
+  const cwd = process.cwd();
+  const standalonePublic = path.join(cwd, '.next', 'standalone', 'public');
+  if (
+    existsSync(path.join(cwd, '.next', 'standalone', 'server.js')) &&
+    existsSync(standalonePublic)
+  ) {
+    return path.join(standalonePublic, 'uploads');
+  }
+  if (existsSync(path.join(cwd, 'server.js'))) {
+    return path.join(cwd, 'public', 'uploads');
+  }
+  return path.join(cwd, 'public', 'uploads');
+}
 
 const MAX_BYTES = 2 * 1024 * 1024;
 
@@ -73,7 +95,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'File too large (max 2 MB)' }, { status: 400 });
     }
 
-    const dir = path.join(process.cwd(), 'public', 'uploads');
+    const dir = resolvePublicUploadsDir();
     await mkdir(dir, { recursive: true });
     const name = `logo-${Date.now()}${ext}`;
     const fsPath = path.join(dir, name);

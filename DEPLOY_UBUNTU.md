@@ -100,6 +100,9 @@ server {
     ssl_certificate     /etc/letsencrypt/live/nsp-live.com/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/nsp-live.com/privkey.pem;
 
+    # رفع الشعار حتى 2 MB؛ الافتراضي في Nginx غالباً 1m وقد يعيد 413
+    client_max_body_size 5m;
+
     location / {
         proxy_pass http://127.0.0.1:3000;
         proxy_http_version 1.1;
@@ -140,3 +143,4 @@ pm2 restart nsp-next
 | **SQLite** | نسخ احتياطي دوري لملف `db/custom.db`. |
 | **Flutter / تطبيق الجوال** | عرّف `API_BASE` على `https://nsp-live.com` (بدون شرطة مائلة أخيرة). |
 | **Bun** | سكربت `npm start` الأصلي يستخدم Bun؛ على السيرفر استخدم **`npm run start:node`**. |
+| **شعار من لوحة التحكم** | يُحفظ تحت `.next/standalone/public/uploads` عند التشغيل من جذر المشروع؛ بعد `npm run build` تأكد من `client_max_body_size` في Nginx (انظر مثال الـ server أعلاه). |
