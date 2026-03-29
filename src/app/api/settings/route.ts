@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { db, ensureSqliteSchema } from '@/lib/db';
 import { mergeSyncConfig, mirrorLegacyFromCurrencies, SYNC_CATEGORY_IDS, type SyncConfigV1 } from '@/lib/sync-config';
 import { DEFAULT_LOGO_SIZES, parseLogoSizes, type LogoSizes } from '@/lib/logo-sizes';
+import { normalizeSocialUrl } from '@/lib/social-url';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,6 +40,8 @@ export async function GET() {
         heroSubtitleAr: settings?.heroSubtitleAr || 'أسعار الصرف الحية',
         heroSubtitleEn: settings?.heroSubtitleEn || 'Live Exchange Rates',
         logoUrl: settings?.logoUrl || null,
+        logoUrlAr: settings?.logoUrlAr ?? null,
+        logoUrlNonAr: settings?.logoUrlNonAr ?? null,
         logoSizes: parseLogoSizes(settings?.logoSizes) as LogoSizes,
         
         // Sync Settings
@@ -59,6 +62,14 @@ export async function GET() {
         darkAccentColor: settings?.darkAccentColor || '#38bdf8',
         darkBgColor: settings?.darkBgColor || '#0f172a',
         tickerMarqueeDurationSec: settings?.tickerMarqueeDurationSec ?? 42,
+        platformApiUsdtTrc20: settings?.platformApiUsdtTrc20 ?? null,
+        platformApiSubscriptionPriceUsd: settings?.platformApiSubscriptionPriceUsd ?? 50,
+        platformApiSubscriptionDays: settings?.platformApiSubscriptionDays ?? 365,
+        footerSocialFacebook: settings?.footerSocialFacebook ?? null,
+        footerSocialX: settings?.footerSocialX ?? null,
+        footerSocialTelegram: settings?.footerSocialTelegram ?? null,
+        footerSocialInstagram: settings?.footerSocialInstagram ?? null,
+        footerSocialYoutube: settings?.footerSocialYoutube ?? null,
       },
     });
   } catch (error) {
@@ -85,6 +96,8 @@ export async function PUT(request: Request) {
       heroSubtitleAr,
       heroSubtitleEn,
       logoUrl,
+      logoUrlAr,
+      logoUrlNonAr,
       logoSizes: logoSizesIn,
       
       // Sync Settings
@@ -104,6 +117,14 @@ export async function PUT(request: Request) {
       darkAccentColor,
       darkBgColor,
       tickerMarqueeDurationSec,
+      platformApiUsdtTrc20,
+      platformApiSubscriptionPriceUsd,
+      platformApiSubscriptionDays,
+      footerSocialFacebook,
+      footerSocialX,
+      footerSocialTelegram,
+      footerSocialInstagram,
+      footerSocialYoutube,
     } = body;
 
     const settings = await db.siteSettings.findFirst();
@@ -175,6 +196,12 @@ export async function PUT(request: Request) {
     if (logoUrl !== undefined) {
       updateData.logoUrl = logoUrl === null ? null : String(logoUrl);
     }
+    if (logoUrlAr !== undefined) {
+      updateData.logoUrlAr = logoUrlAr === null ? null : String(logoUrlAr);
+    }
+    if (logoUrlNonAr !== undefined) {
+      updateData.logoUrlNonAr = logoUrlNonAr === null ? null : String(logoUrlNonAr);
+    }
     if (logoSizesJson !== undefined) {
       updateData.logoSizes = logoSizesJson;
     }
@@ -214,6 +241,40 @@ export async function PUT(request: Request) {
         updateData.tickerMarqueeDurationSec = d;
       }
     }
+    if (platformApiUsdtTrc20 !== undefined) {
+      const s =
+        platformApiUsdtTrc20 === null || platformApiUsdtTrc20 === ''
+          ? null
+          : String(platformApiUsdtTrc20).trim().slice(0, 120);
+      updateData.platformApiUsdtTrc20 = s;
+    }
+    if (platformApiSubscriptionPriceUsd !== undefined && platformApiSubscriptionPriceUsd !== null) {
+      const p = Number(platformApiSubscriptionPriceUsd);
+      if (Number.isFinite(p) && p >= 0 && p <= 1_000_000) {
+        updateData.platformApiSubscriptionPriceUsd = p;
+      }
+    }
+    if (platformApiSubscriptionDays !== undefined && platformApiSubscriptionDays !== null) {
+      const d = Math.round(Number(platformApiSubscriptionDays));
+      if (Number.isFinite(d) && d >= 1 && d <= 3650) {
+        updateData.platformApiSubscriptionDays = d;
+      }
+    }
+    if (footerSocialFacebook !== undefined) {
+      updateData.footerSocialFacebook = normalizeSocialUrl(footerSocialFacebook);
+    }
+    if (footerSocialX !== undefined) {
+      updateData.footerSocialX = normalizeSocialUrl(footerSocialX);
+    }
+    if (footerSocialTelegram !== undefined) {
+      updateData.footerSocialTelegram = normalizeSocialUrl(footerSocialTelegram);
+    }
+    if (footerSocialInstagram !== undefined) {
+      updateData.footerSocialInstagram = normalizeSocialUrl(footerSocialInstagram);
+    }
+    if (footerSocialYoutube !== undefined) {
+      updateData.footerSocialYoutube = normalizeSocialUrl(footerSocialYoutube);
+    }
     if (mergedSync) {
       updateData.syncConfig = JSON.parse(JSON.stringify(mergedSync)) as Prisma.InputJsonValue;
     }
@@ -245,6 +306,8 @@ export async function PUT(request: Request) {
           heroSubtitleAr: heroSubtitleAr != null ? String(heroSubtitleAr) : 'أسعار الصرف الحية',
           heroSubtitleEn: heroSubtitleEn != null ? String(heroSubtitleEn) : 'Live Exchange Rates',
           logoUrl: logoUrl === undefined ? null : logoUrl === null ? null : String(logoUrl),
+          logoUrlAr: logoUrlAr === undefined ? null : logoUrlAr === null ? null : String(logoUrlAr),
+          logoUrlNonAr: logoUrlNonAr === undefined ? null : logoUrlNonAr === null ? null : String(logoUrlNonAr),
           logoSizes: createLogoSizes,
           autoUpdateEnabled: autoUpdateEnabled ?? true,
           updateInterval: mirror?.updateInterval ?? (typeof updateInterval === 'number' ? Math.round(updateInterval) : 6),
@@ -265,6 +328,24 @@ export async function PUT(request: Request) {
             typeof tickerMarqueeDurationSec === 'number' && Number.isFinite(tickerMarqueeDurationSec)
               ? Math.min(180, Math.max(8, Math.round(tickerMarqueeDurationSec)))
               : 42,
+          platformApiUsdtTrc20:
+            platformApiUsdtTrc20 === undefined || platformApiUsdtTrc20 === null || platformApiUsdtTrc20 === ''
+              ? null
+              : String(platformApiUsdtTrc20).trim().slice(0, 120),
+          platformApiSubscriptionPriceUsd:
+            typeof platformApiSubscriptionPriceUsd === 'number' &&
+            Number.isFinite(platformApiSubscriptionPriceUsd) &&
+            platformApiSubscriptionPriceUsd >= 0 &&
+            platformApiSubscriptionPriceUsd <= 1_000_000
+              ? platformApiSubscriptionPriceUsd
+              : 50,
+          platformApiSubscriptionDays:
+            typeof platformApiSubscriptionDays === 'number' &&
+            Number.isFinite(platformApiSubscriptionDays) &&
+            platformApiSubscriptionDays >= 1 &&
+            platformApiSubscriptionDays <= 3650
+              ? Math.round(platformApiSubscriptionDays)
+              : 365,
         },
       });
     }

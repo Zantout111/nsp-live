@@ -40,6 +40,8 @@ import {
   Fuel,
   DollarSign,
   Gauge,
+  Code,
+  Share2,
 } from 'lucide-react';
 
 interface CurrencyRate {
@@ -108,10 +110,18 @@ interface SiteIdentity {
   heroSubtitle: string;
   heroSubtitleAr: string;
   heroSubtitleEn: string;
+  /** احتياطي قديم — يُستخدم إن لم يُضبط شعار العربية أو باقي اللغات */
   logoUrl: string | null;
+  logoUrlAr: string | null;
+  logoUrlNonAr: string | null;
   logoSizes: LogoSizes;
   /** مدة دورة شريط الأسعار فوق الترويسة (ثوانٍ؛ أقل = حركة أسرع) */
   tickerMarqueeDurationSec: number;
+  footerSocialFacebook: string;
+  footerSocialX: string;
+  footerSocialTelegram: string;
+  footerSocialInstagram: string;
+  footerSocialYoutube: string;
 }
 
 interface VisualIdentity {
@@ -157,6 +167,36 @@ interface CryptoRateData {
   lastUpdated: string;
 }
 
+interface ApiAccessRequestRow {
+  id: string;
+  fullName: string;
+  email: string;
+  phone: string;
+  websiteName: string;
+  websiteUrl: string;
+  usagePurpose: string;
+  programmingType: string;
+  receiptImageUrl: string | null;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  adminNote: string | null;
+  createdAt: string;
+}
+
+interface ApiAllowedDomainRow {
+  id: string;
+  domain: string;
+  enabled: boolean;
+  expiresAt: string | null;
+  requestId: string | null;
+  note: string | null;
+  request: {
+    id: string;
+    fullName: string;
+    email: string;
+    websiteUrl: string;
+  } | null;
+}
+
 export default function AdminPage() {
   const router = useRouter();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -192,8 +232,15 @@ export default function AdminPage() {
     heroSubtitleAr: 'أسعار الصرف الحية',
     heroSubtitleEn: 'Live Exchange Rates',
     logoUrl: null,
+    logoUrlAr: null,
+    logoUrlNonAr: null,
     logoSizes: { ...DEFAULT_LOGO_SIZES },
     tickerMarqueeDurationSec: 42,
+    footerSocialFacebook: '',
+    footerSocialX: '',
+    footerSocialTelegram: '',
+    footerSocialInstagram: '',
+    footerSocialYoutube: '',
   });
   const [uploadingLogo, setUploadingLogo] = useState(false);
   
@@ -219,6 +266,16 @@ export default function AdminPage() {
   const [editingForex, setEditingForex] = useState<Record<string, { rate: string; change: string }>>({});
   const [editingCrypto, setEditingCrypto] = useState<Record<string, { price: string; change: string }>>({});
   
+  const [apiAccessLoading, setApiAccessLoading] = useState(false);
+  const [apiRequests, setApiRequests] = useState<ApiAccessRequestRow[]>([]);
+  const [apiDomains, setApiDomains] = useState<ApiAllowedDomainRow[]>([]);
+  const [platformApiUsdtTrc20, setPlatformApiUsdtTrc20] = useState('');
+  const [platformApiSubscriptionPriceUsd, setPlatformApiSubscriptionPriceUsd] = useState('50');
+  const [platformApiSubscriptionDays, setPlatformApiSubscriptionDays] = useState('365');
+  const [savingUsdtWallet, setSavingUsdtWallet] = useState(false);
+  const [newManualDomain, setNewManualDomain] = useState('');
+  const [approveDomainDraft, setApproveDomainDraft] = useState<Record<string, string>>({});
+
   const { toast } = useToast();
   const t = useTranslations();
   const locale = useLocale();
@@ -243,6 +300,27 @@ export default function AdminPage() {
     checkAuth();
   }, [checkAuth]);
 
+  useEffect(() => {
+    if (activeTab !== 'api' || !isAuthenticated) return;
+    let cancelled = false;
+    (async () => {
+      setApiAccessLoading(true);
+      try {
+        const r = await fetch('/api/admin/api-access');
+        const j = await r.json();
+        if (!cancelled && j.success) {
+          setApiRequests(j.requests as ApiAccessRequestRow[]);
+          setApiDomains(j.domains as ApiAllowedDomainRow[]);
+        }
+      } finally {
+        if (!cancelled) setApiAccessLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, isAuthenticated]);
+
   const loadSettings = async () => {
     try {
       const response = await fetch('/api/settings');
@@ -265,12 +343,19 @@ export default function AdminPage() {
           heroSubtitle: result.settings.heroSubtitle || 'أسعار الصرف الحية',
           heroSubtitleAr: result.settings.heroSubtitleAr || 'أسعار الصرف الحية',
           heroSubtitleEn: result.settings.heroSubtitleEn || 'Live Exchange Rates',
-          logoUrl: result.settings.logoUrl,
+          logoUrl: result.settings.logoUrl ?? null,
+          logoUrlAr: result.settings.logoUrlAr ?? null,
+          logoUrlNonAr: result.settings.logoUrlNonAr ?? null,
           logoSizes: parseLogoSizes(result.settings.logoSizes),
           tickerMarqueeDurationSec: Math.min(
             180,
             Math.max(8, Number(result.settings.tickerMarqueeDurationSec) || 42)
           ),
+          footerSocialFacebook: result.settings.footerSocialFacebook ?? '',
+          footerSocialX: result.settings.footerSocialX ?? '',
+          footerSocialTelegram: result.settings.footerSocialTelegram ?? '',
+          footerSocialInstagram: result.settings.footerSocialInstagram ?? '',
+          footerSocialYoutube: result.settings.footerSocialYoutube ?? '',
         });
         setVisualIdentity({
           lightPrimaryColor: result.settings.lightPrimaryColor || '#0ea5e9',
@@ -280,6 +365,15 @@ export default function AdminPage() {
           darkAccentColor: result.settings.darkAccentColor || '#38bdf8',
           darkBgColor: result.settings.darkBgColor || '#0f172a'
         });
+        setPlatformApiUsdtTrc20(result.settings.platformApiUsdtTrc20 ?? '');
+        const p = result.settings.platformApiSubscriptionPriceUsd;
+        setPlatformApiSubscriptionPriceUsd(
+          p !== undefined && p !== null && Number.isFinite(Number(p)) ? String(p) : '50'
+        );
+        const d = result.settings.platformApiSubscriptionDays;
+        setPlatformApiSubscriptionDays(
+          d !== undefined && d !== null && Number.isFinite(Number(d)) ? String(Math.round(Number(d))) : '365'
+        );
       }
     } catch (error) {
       console.error('Error fetching settings:', error);
@@ -401,6 +495,161 @@ export default function AdminPage() {
       });
     } catch {
       // ignore
+    }
+  };
+
+  const refreshApiAccessPanel = async () => {
+    setApiAccessLoading(true);
+    try {
+      const r = await fetch('/api/admin/api-access');
+      const j = await r.json();
+      if (j.success) {
+        setApiRequests(j.requests as ApiAccessRequestRow[]);
+        setApiDomains(j.domains as ApiAllowedDomainRow[]);
+      }
+    } finally {
+      setApiAccessLoading(false);
+    }
+  };
+
+  const handleSaveUsdtWallet = async () => {
+    setSavingUsdtWallet(true);
+    try {
+      const priceNum = parseFloat(platformApiSubscriptionPriceUsd.replace(',', '.'));
+      const daysNum = parseInt(platformApiSubscriptionDays, 10);
+      const r = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          platformApiUsdtTrc20: platformApiUsdtTrc20.trim() === '' ? null : platformApiUsdtTrc20.trim(),
+          platformApiSubscriptionPriceUsd: Number.isFinite(priceNum) ? priceNum : 50,
+          platformApiSubscriptionDays: Number.isFinite(daysNum) ? daysNum : 365,
+        }),
+      });
+      const j = await r.json();
+      if (j.success) {
+        toast({
+          title: locale === 'ar' ? 'تم حفظ إعدادات API' : 'API settings saved',
+        });
+      } else {
+        toast({
+          variant: 'destructive',
+          title: locale === 'ar' ? 'فشل الحفظ' : 'Save failed',
+          description: j.error || j.details,
+        });
+      }
+    } finally {
+      setSavingUsdtWallet(false);
+    }
+  };
+
+  const handleApproveApiRequest = async (requestId: string) => {
+    const domain = (approveDomainDraft[requestId] ?? '').trim();
+    try {
+      const r = await fetch('/api/admin/api-access/action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'approve',
+          requestId,
+          ...(domain ? { domain } : {}),
+        }),
+      });
+      const j = await r.json();
+      if (!r.ok || !j.success) {
+        toast({
+          variant: 'destructive',
+          title: locale === 'ar' ? 'فشلت الموافقة' : 'Approve failed',
+          description: j.error,
+        });
+        return;
+      }
+      toast({ title: locale === 'ar' ? 'تمت الموافقة والنطاق' : 'Approved & domain updated' });
+      await refreshApiAccessPanel();
+    } catch {
+      toast({ variant: 'destructive', title: locale === 'ar' ? 'خطأ' : 'Error' });
+    }
+  };
+
+  const handleRejectApiRequest = async (requestId: string) => {
+    try {
+      const r = await fetch('/api/admin/api-access/action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'reject', requestId }),
+      });
+      const j = await r.json();
+      if (!r.ok || !j.success) {
+        toast({
+          variant: 'destructive',
+          title: locale === 'ar' ? 'فشل الرفض' : 'Reject failed',
+          description: j.error,
+        });
+        return;
+      }
+      toast({ title: locale === 'ar' ? 'تم رفض الطلب' : 'Request rejected' });
+      await refreshApiAccessPanel();
+    } catch {
+      toast({ variant: 'destructive', title: locale === 'ar' ? 'خطأ' : 'Error' });
+    }
+  };
+
+  const handleToggleApiDomain = async (id: string, enabled: boolean) => {
+    try {
+      const r = await fetch(`/api/admin/api-access/domains/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled }),
+      });
+      const j = await r.json();
+      if (!r.ok || !j.success) {
+        toast({ variant: 'destructive', title: locale === 'ar' ? 'فشل التحديث' : 'Update failed' });
+        return;
+      }
+      await refreshApiAccessPanel();
+    } catch {
+      toast({ variant: 'destructive', title: locale === 'ar' ? 'خطأ' : 'Error' });
+    }
+  };
+
+  const handleDeleteApiDomain = async (id: string) => {
+    if (!confirm(locale === 'ar' ? 'حذف هذا النطاق من القائمة؟' : 'Remove this domain from the list?')) return;
+    try {
+      const r = await fetch(`/api/admin/api-access/domains/${id}`, { method: 'DELETE' });
+      const j = await r.json();
+      if (!r.ok || !j.success) {
+        toast({ variant: 'destructive', title: locale === 'ar' ? 'فشل الحذف' : 'Delete failed' });
+        return;
+      }
+      await refreshApiAccessPanel();
+    } catch {
+      toast({ variant: 'destructive', title: locale === 'ar' ? 'خطأ' : 'Error' });
+    }
+  };
+
+  const handleAddManualDomain = async () => {
+    const d = newManualDomain.trim();
+    if (!d) return;
+    try {
+      const r = await fetch('/api/admin/api-access/domains', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ domain: d }),
+      });
+      const j = await r.json();
+      if (!r.ok || !j.success) {
+        toast({
+          variant: 'destructive',
+          title: locale === 'ar' ? 'فشل الإضافة' : 'Add failed',
+          description: j.error,
+        });
+        return;
+      }
+      setNewManualDomain('');
+      toast({ title: locale === 'ar' ? 'تمت إضافة النطاق' : 'Domain added' });
+      await refreshApiAccessPanel();
+    } catch {
+      toast({ variant: 'destructive', title: locale === 'ar' ? 'خطأ' : 'Error' });
     }
   };
 
@@ -693,12 +942,13 @@ export default function AdminPage() {
     }
   };
 
-  const handleLogoFile = async (file: File | null) => {
+  const handleLogoFile = async (file: File | null, target: 'ar' | 'nonAr') => {
     if (!file) return;
     setUploadingLogo(true);
     try {
       const fd = new FormData();
       fd.append('file', file);
+      fd.append('variant', target === 'ar' ? 'ar' : 'nonAr');
       const response = await fetch('/api/admin/upload-logo', {
         method: 'POST',
         body: fd,
@@ -729,12 +979,20 @@ export default function AdminPage() {
       }
 
       const sizesToSave = siteIdentity.logoSizes;
-      setSiteIdentity((prev) => ({ ...prev, logoUrl: result.url! }));
+      const patch =
+        target === 'ar'
+          ? { logoUrlAr: result.url!, logoSizes: sizesToSave }
+          : { logoUrlNonAr: result.url!, logoSizes: sizesToSave };
+      setSiteIdentity((prev) =>
+        target === 'ar'
+          ? { ...prev, logoUrlAr: result.url! }
+          : { ...prev, logoUrlNonAr: result.url! }
+      );
 
       const saveRes = await fetch('/api/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ logoUrl: result.url, logoSizes: sizesToSave }),
+        body: JSON.stringify(patch),
         credentials: 'include',
       });
       const saveJson = (await saveRes.json().catch(() => ({}))) as {
@@ -1044,7 +1302,7 @@ export default function AdminPage() {
 
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-7 mb-6">
+          <TabsList className="mb-6 flex w-full flex-wrap gap-1">
             <TabsTrigger value="rates" className="flex items-center gap-1">
               <Coins className="w-4 h-4" />
               <span className="hidden lg:inline">{locale === 'ar' ? 'الصرف' : 'Rates'}</span>
@@ -1072,6 +1330,10 @@ export default function AdminPage() {
             <TabsTrigger value="visual" className="flex items-center gap-1">
               <Palette className="w-4 h-4" />
               <span className="hidden lg:inline">{locale === 'ar' ? 'الألوان' : 'Colors'}</span>
+            </TabsTrigger>
+            <TabsTrigger value="api" className="flex items-center gap-1">
+              <Code className="w-4 h-4" />
+              <span className="hidden lg:inline">API</span>
             </TabsTrigger>
           </TabsList>
 
@@ -1785,17 +2047,22 @@ export default function AdminPage() {
                   </div>
                 </div>
 
-                {/* Logo: upload + URL + sizes */}
+                {/* Logo: Arabic + non-Arabic + sizes */}
                 <div className="space-y-4 rounded-lg border border-border bg-muted/20 p-4">
                   <div className="flex items-center gap-2 text-sm font-medium">
                     <ImageIcon className="w-4 h-4" />
-                    {locale === 'ar' ? 'الشعار' : 'Logo'}
+                    {locale === 'ar' ? 'الشعارات حسب اللغة' : 'Logos by language'}
                   </div>
+                  <p className="text-xs text-muted-foreground">
+                    {locale === 'ar'
+                      ? 'شعار منفصل للعربية، وشعار لباقي اللغات (إنجليزي، سويدي، ألماني، فرنسي…). إن تُرك أحدهما فارغاً يُستخدم الحقل القديم «شعار موحّد» إن وُجد.'
+                      : 'Separate logos for Arabic vs all other locales. If one is empty, the legacy unified logo is used as fallback.'}
+                  </p>
 
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-                    <div className="space-y-2 flex-1">
-                      <Label className="text-xs text-muted-foreground">
-                        {locale === 'ar' ? 'رفع ملف (PNG، JPG، WebP، GIF، SVG — حتى 2 م.ب)' : 'Upload file (PNG, JPG, WebP, GIF, SVG — max 2 MB)'}
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2 rounded-md border border-border/80 bg-background/50 p-3">
+                      <Label className="text-sm font-medium">
+                        {locale === 'ar' ? 'شعار الواجهة العربية' : 'Arabic UI logo'}
                       </Label>
                       <Input
                         type="file"
@@ -1804,22 +2071,63 @@ export default function AdminPage() {
                         className="cursor-pointer"
                         onChange={(e) => {
                           const f = e.target.files?.[0];
-                          void handleLogoFile(f ?? null);
+                          void handleLogoFile(f ?? null, 'ar');
                           e.target.value = '';
                         }}
                       />
-                      {uploadingLogo && (
-                        <p className="text-xs text-muted-foreground flex items-center gap-2">
-                          <RefreshCw className="h-3 w-3 animate-spin" />
-                          {locale === 'ar' ? 'جاري الرفع…' : 'Uploading…'}
-                        </p>
-                      )}
+                      <Label className="text-xs text-muted-foreground">
+                        {locale === 'ar' ? 'أو رابط (اختياري)' : 'Or URL (optional)'}
+                      </Label>
+                      <Input
+                        value={siteIdentity.logoUrlAr || ''}
+                        onChange={(e) =>
+                          setSiteIdentity({ ...siteIdentity, logoUrlAr: e.target.value || null })
+                        }
+                        placeholder="/uploads/logo-ar-....png"
+                        dir="ltr"
+                      />
+                    </div>
+                    <div className="space-y-2 rounded-md border border-border/80 bg-background/50 p-3">
+                      <Label className="text-sm font-medium">
+                        {locale === 'ar' ? 'شعار باقي اللغات' : 'Non-Arabic locales logo'}
+                      </Label>
+                      <Input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+                        disabled={uploadingLogo}
+                        className="cursor-pointer"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          void handleLogoFile(f ?? null, 'nonAr');
+                          e.target.value = '';
+                        }}
+                      />
+                      <Label className="text-xs text-muted-foreground">
+                        {locale === 'ar' ? 'أو رابط (اختياري)' : 'Or URL (optional)'}
+                      </Label>
+                      <Input
+                        value={siteIdentity.logoUrlNonAr || ''}
+                        onChange={(e) =>
+                          setSiteIdentity({ ...siteIdentity, logoUrlNonAr: e.target.value || null })
+                        }
+                        placeholder="/uploads/logo-non-....png"
+                        dir="ltr"
+                      />
                     </div>
                   </div>
 
-                  <div className="space-y-2">
+                  {uploadingLogo && (
+                    <p className="text-xs text-muted-foreground flex items-center gap-2">
+                      <RefreshCw className="h-3 w-3 animate-spin" />
+                      {locale === 'ar' ? 'جاري الرفع…' : 'Uploading…'}
+                    </p>
+                  )}
+
+                  <div className="space-y-2 border-t border-border pt-3">
                     <Label className="text-xs text-muted-foreground">
-                      {locale === 'ar' ? 'أو رابط الشعار (اختياري)' : 'Or logo URL (optional)'}
+                      {locale === 'ar'
+                        ? 'شعار موحّد (قديم — احتياطي إذا لم تُضبط الأعلى)'
+                        : 'Legacy unified logo URL (fallback)'}
                     </Label>
                     <Input
                       value={siteIdentity.logoUrl || ''}
@@ -1877,42 +2185,124 @@ export default function AdminPage() {
                     ))}
                   </div>
 
-                  {siteIdentity.logoUrl && (
+                  {(siteIdentity.logoUrlAr ||
+                    siteIdentity.logoUrlNonAr ||
+                    siteIdentity.logoUrl) && (
                     <div className="mt-2 space-y-3 rounded-md border border-dashed border-border p-3">
                       <p className="text-xs text-muted-foreground">
-                        {locale === 'ar' ? 'معاينة الأحجام:' : 'Size previews:'}
+                        {locale === 'ar' ? 'معاينة الأحجام (عربي | باقي اللغات):' : 'Size previews (AR | other locales):'}
                       </p>
-                      <div className="flex flex-wrap items-end gap-6">
-                        <div className="text-center">
-                          <p className="mb-1 text-[10px] uppercase text-muted-foreground">Header</p>
-                          <img
-                            src={resolveLogoUrlForClient(siteIdentity.logoUrl)}
-                            alt=""
-                            className="mx-auto object-contain"
-                            style={{ height: siteIdentity.logoSizes.header, width: 'auto', maxWidth: 280 }}
-                          />
+                      {(['header', 'footer', 'loading'] as const).map((slot) => (
+                        <div key={slot} className="space-y-1">
+                          <p className="text-[10px] font-medium uppercase text-muted-foreground">{slot}</p>
+                          <div className="flex flex-wrap items-end gap-4">
+                            <div className="text-center">
+                              <p className="mb-0.5 text-[10px] text-muted-foreground">AR</p>
+                              <img
+                                src={resolveLogoUrlForClient(
+                                  siteIdentity.logoUrlAr || siteIdentity.logoUrl
+                                )}
+                                alt=""
+                                className="mx-auto object-contain"
+                                style={{
+                                  height: siteIdentity.logoSizes[slot],
+                                  width: 'auto',
+                                  maxWidth: slot === 'header' ? 280 : 200,
+                                }}
+                              />
+                            </div>
+                            <div className="text-center">
+                              <p className="mb-0.5 text-[10px] text-muted-foreground">
+                                {locale === 'ar' ? 'غير عربي' : 'Non-AR'}
+                              </p>
+                              <img
+                                src={resolveLogoUrlForClient(
+                                  siteIdentity.logoUrlNonAr || siteIdentity.logoUrl
+                                )}
+                                alt=""
+                                className="mx-auto object-contain"
+                                style={{
+                                  height: siteIdentity.logoSizes[slot],
+                                  width: 'auto',
+                                  maxWidth: slot === 'header' ? 280 : 200,
+                                }}
+                              />
+                            </div>
+                          </div>
                         </div>
-                        <div className="text-center">
-                          <p className="mb-1 text-[10px] uppercase text-muted-foreground">Footer</p>
-                          <img
-                            src={resolveLogoUrlForClient(siteIdentity.logoUrl)}
-                            alt=""
-                            className="mx-auto object-contain"
-                            style={{ height: siteIdentity.logoSizes.footer, width: 'auto', maxWidth: 200 }}
-                          />
-                        </div>
-                        <div className="text-center">
-                          <p className="mb-1 text-[10px] uppercase text-muted-foreground">Loading</p>
-                          <img
-                            src={resolveLogoUrlForClient(siteIdentity.logoUrl)}
-                            alt=""
-                            className="mx-auto object-contain"
-                            style={{ height: siteIdentity.logoSizes.loading, width: 'auto', maxWidth: 200 }}
-                          />
-                        </div>
-                      </div>
+                      ))}
                     </div>
                   )}
+                </div>
+
+                {/* Footer social (public site) */}
+                <div className="space-y-4 rounded-lg border border-border bg-muted/20 p-4">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <Share2 className="h-4 w-4 text-primary" />
+                    {locale === 'ar' ? 'روابط التواصل في التذييل' : 'Footer social links'}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {locale === 'ar'
+                      ? 'اترك الحقل فارغاً لإخفاء الزر. يُضاف https:// تلقائياً عند الحاجة.'
+                      : 'Leave empty to hide a button. https:// is added when missing.'}
+                  </p>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label className="text-xs">Facebook</Label>
+                      <Input
+                        dir="ltr"
+                        placeholder="https://facebook.com/..."
+                        value={siteIdentity.footerSocialFacebook}
+                        onChange={(e) =>
+                          setSiteIdentity({ ...siteIdentity, footerSocialFacebook: e.target.value })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs">X (Twitter)</Label>
+                      <Input
+                        dir="ltr"
+                        placeholder="https://x.com/..."
+                        value={siteIdentity.footerSocialX}
+                        onChange={(e) =>
+                          setSiteIdentity({ ...siteIdentity, footerSocialX: e.target.value })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs">Telegram</Label>
+                      <Input
+                        dir="ltr"
+                        placeholder="https://t.me/..."
+                        value={siteIdentity.footerSocialTelegram}
+                        onChange={(e) =>
+                          setSiteIdentity({ ...siteIdentity, footerSocialTelegram: e.target.value })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs">Instagram</Label>
+                      <Input
+                        dir="ltr"
+                        placeholder="https://instagram.com/..."
+                        value={siteIdentity.footerSocialInstagram}
+                        onChange={(e) =>
+                          setSiteIdentity({ ...siteIdentity, footerSocialInstagram: e.target.value })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2 sm:col-span-2">
+                      <Label className="text-xs">YouTube</Label>
+                      <Input
+                        dir="ltr"
+                        placeholder="https://youtube.com/..."
+                        value={siteIdentity.footerSocialYoutube}
+                        onChange={(e) =>
+                          setSiteIdentity({ ...siteIdentity, footerSocialYoutube: e.target.value })
+                        }
+                      />
+                    </div>
+                  </div>
                 </div>
 
                 {/* Preview */}
@@ -1921,19 +2311,41 @@ export default function AdminPage() {
                     {locale === 'ar' ? 'معاينة:' : 'Preview:'}
                   </p>
                   <div className="bg-background rounded-lg p-4">
-                    <div className="flex items-center gap-3 mb-2">
-                      {siteIdentity.logoUrl && (
+                    <div className="mb-3 flex flex-wrap items-center gap-4">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-muted-foreground">AR</span>
                         <img
-                          src={resolveLogoUrlForClient(siteIdentity.logoUrl)}
-                          alt="Logo"
+                          src={resolveLogoUrlForClient(
+                            siteIdentity.logoUrlAr || siteIdentity.logoUrl
+                          )}
+                          alt=""
                           className="w-auto object-contain"
-                          style={{ height: siteIdentity.logoSizes.header, maxHeight: siteIdentity.logoSizes.header }}
+                          style={{
+                            height: siteIdentity.logoSizes.header,
+                            maxHeight: siteIdentity.logoSizes.header,
+                          }}
                         />
-                      )}
-                      <span className="font-bold text-lg">
-                        {locale === 'ar' ? siteIdentity.siteNameAr : siteIdentity.siteNameEn}
-                      </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-muted-foreground">
+                          {locale === 'ar' ? 'غير عربي' : 'Non-AR'}
+                        </span>
+                        <img
+                          src={resolveLogoUrlForClient(
+                            siteIdentity.logoUrlNonAr || siteIdentity.logoUrl
+                          )}
+                          alt=""
+                          className="w-auto object-contain"
+                          style={{
+                            height: siteIdentity.logoSizes.header,
+                            maxHeight: siteIdentity.logoSizes.header,
+                          }}
+                        />
+                      </div>
                     </div>
+                    <p className="mb-2 font-bold text-lg">
+                      {locale === 'ar' ? siteIdentity.siteNameAr : siteIdentity.siteNameEn}
+                    </p>
                     <p className="text-muted-foreground">
                       {locale === 'ar' ? siteIdentity.heroSubtitleAr : siteIdentity.heroSubtitleEn}
                     </p>
@@ -2197,6 +2609,235 @@ export default function AdminPage() {
               )}
               {locale === 'ar' ? 'حفظ الهوية البصرية' : 'Save Visual Identity'}
             </Button>
+          </TabsContent>
+
+          <TabsContent value="api" className="space-y-6">
+            <Card className="bg-card/50 border-border backdrop-blur-sm">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Code className="w-5 h-5 text-primary" />
+                  {locale === 'ar' ? 'إعدادات صفحة API والاشتراك' : 'API page & subscription settings'}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  {locale === 'ar'
+                    ? 'يُعرض السعر والمدة في /api-access. عند الموافقة على طلب أو إضافة نطاق يدوياً يُضبط تاريخ انتهاء = اليوم + عدد الأيام هنا؛ بعدها يُعطّل النطاق تلقائياً عند طلب /api/rates.'
+                    : 'Price and duration appear on /api-access. New approvals/manual domains get expiresAt = today + days below; expired domains auto-disable on /api/rates.'}
+                </p>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <Label>{locale === 'ar' ? 'السعر (USD)' : 'Price (USD)'}</Label>
+                    <Input
+                      type="text"
+                      inputMode="decimal"
+                      value={platformApiSubscriptionPriceUsd}
+                      onChange={(e) => setPlatformApiSubscriptionPriceUsd(e.target.value)}
+                      dir="ltr"
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <Label>{locale === 'ar' ? 'مدة الاشتراك (يوم)' : 'Subscription period (days)'}</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={3650}
+                      value={platformApiSubscriptionDays}
+                      onChange={(e) => setPlatformApiSubscriptionDays(e.target.value)}
+                      dir="ltr"
+                      className="mt-1"
+                    />
+                  </div>
+                </div>
+                <Label>{locale === 'ar' ? 'عنوان المحفظة USDT (TRC20)' : 'USDT TRC20 wallet address'}</Label>
+                <Input
+                  value={platformApiUsdtTrc20}
+                  onChange={(e) => setPlatformApiUsdtTrc20(e.target.value)}
+                  dir="ltr"
+                  placeholder="T..."
+                  className="font-mono text-sm"
+                />
+                <Button onClick={handleSaveUsdtWallet} disabled={savingUsdtWallet}>
+                  {savingUsdtWallet ? (
+                    <RefreshCw className="w-4 h-4 ml-1 animate-spin" />
+                  ) : (
+                    <Check className="w-4 h-4 ml-1" />
+                  )}
+                  {locale === 'ar' ? 'حفظ الإعدادات' : 'Save settings'}
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-card/50 border-border backdrop-blur-sm">
+              <CardHeader>
+                <CardTitle>
+                  {locale === 'ar' ? 'طلبات وصول API' : 'API access requests'}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {apiAccessLoading && (
+                  <p className="text-sm text-muted-foreground">{locale === 'ar' ? 'جاري التحميل…' : 'Loading…'}</p>
+                )}
+                {!apiAccessLoading && apiRequests.length === 0 && (
+                  <p className="text-sm text-muted-foreground">{locale === 'ar' ? 'لا طلبات بعد.' : 'No requests yet.'}</p>
+                )}
+                {apiRequests.map((req) => (
+                  <div
+                    key={req.id}
+                    className="rounded-lg border border-border/80 bg-muted/30 p-4 text-sm space-y-2"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="font-medium">{req.fullName}</span>
+                      <span
+                        className={`rounded px-2 py-0.5 text-xs ${
+                          req.status === 'PENDING'
+                            ? 'bg-amber-500/20 text-amber-800 dark:text-amber-200'
+                            : req.status === 'APPROVED'
+                              ? 'bg-green-500/20 text-green-800 dark:text-green-200'
+                              : 'bg-muted text-muted-foreground'
+                        }`}
+                      >
+                        {req.status}
+                      </span>
+                    </div>
+                    <p className="text-muted-foreground break-all" dir="ltr">
+                      {req.email} · {req.phone}
+                    </p>
+                    <p>
+                      {req.websiteName} —{' '}
+                      <span className="break-all" dir="ltr">
+                        {req.websiteUrl}
+                      </span>
+                    </p>
+                    <p className="text-muted-foreground">
+                      {req.usagePurpose} / {req.programmingType}
+                    </p>
+                    {req.receiptImageUrl && (
+                      <a
+                        href={req.receiptImageUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary underline text-xs"
+                      >
+                        {locale === 'ar' ? 'عرض إيصال الدفع' : 'View receipt'}
+                      </a>
+                    )}
+                    {req.status === 'PENDING' && (
+                      <div className="flex flex-col gap-2 pt-2 sm:flex-row sm:items-end">
+                        <div className="flex-1">
+                          <Label className="text-xs">
+                            {locale === 'ar' ? 'نطاق للتفعيل (اختياري، افتراضي من الرابط)' : 'Domain to allow (optional)'}
+                          </Label>
+                          <Input
+                            value={approveDomainDraft[req.id] ?? ''}
+                            onChange={(e) =>
+                              setApproveDomainDraft((prev) => ({ ...prev, [req.id]: e.target.value }))
+                            }
+                            dir="ltr"
+                            placeholder={req.websiteUrl}
+                            className="mt-1 font-mono text-xs"
+                          />
+                        </div>
+                        <div className="flex gap-2">
+                          <Button size="sm" onClick={() => handleApproveApiRequest(req.id)}>
+                            {locale === 'ar' ? 'موافقة' : 'Approve'}
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={() => handleRejectApiRequest(req.id)}>
+                            {locale === 'ar' ? 'رفض' : 'Reject'}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+
+            <Card className="bg-card/50 border-border backdrop-blur-sm">
+              <CardHeader>
+                <CardTitle>{locale === 'ar' ? 'النطاقات المصرّح بها' : 'Allowed domains'}</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                  <div className="flex-1">
+                    <Label>{locale === 'ar' ? 'إضافة نطاق يدوياً' : 'Add domain manually'}</Label>
+                    <Input
+                      value={newManualDomain}
+                      onChange={(e) => setNewManualDomain(e.target.value)}
+                      dir="ltr"
+                      placeholder="example.com"
+                      className="mt-1 font-mono text-sm"
+                    />
+                  </div>
+                  <Button type="button" onClick={handleAddManualDomain}>
+                    {locale === 'ar' ? 'إضافة' : 'Add'}
+                  </Button>
+                </div>
+                {apiDomains.length === 0 && !apiAccessLoading && (
+                  <p className="text-sm text-muted-foreground">
+                    {locale === 'ar'
+                      ? 'القائمة فارغة: لا قيود على /api/rates. أي نطاق يمكنه الاستدعاء من المتصفح.'
+                      : 'Empty list: no origin restrictions on /api/rates.'}
+                  </p>
+                )}
+                <ul className="space-y-3">
+                  {apiDomains.map((d) => {
+                    const exp = d.expiresAt ? new Date(d.expiresAt) : null;
+                    const expired = !!(exp && exp.getTime() < Date.now());
+                    const expLabel =
+                      exp &&
+                      exp.toLocaleDateString(locale === 'ar' ? 'ar-SY' : 'en-US', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric',
+                      });
+                    return (
+                    <li
+                      key={d.id}
+                      className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border/60 bg-background/50 px-3 py-2"
+                    >
+                      <div className="min-w-0">
+                        <p className="font-mono text-sm break-all" dir="ltr">
+                          {d.domain}
+                        </p>
+                        {d.request && (
+                          <p className="text-xs text-muted-foreground">
+                            {d.request.fullName} · {d.request.email}
+                          </p>
+                        )}
+                        {d.expiresAt ? (
+                          <p className={`text-xs ${expired ? 'text-destructive' : 'text-muted-foreground'}`}>
+                            {locale === 'ar' ? 'ينتهي الاشتراك:' : 'Subscription ends:'}{' '}
+                            {expLabel}
+                            {expired ? ` (${locale === 'ar' ? 'منتهي' : 'expired'})` : ''}
+                          </p>
+                        ) : (
+                          <p className="text-xs text-amber-700 dark:text-amber-500/90">
+                            {locale === 'ar' ? 'بدون تاريخ انتهاء (سجل قديم)' : 'No expiry date (legacy row)'}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2">
+                          <Switch
+                            checked={d.enabled}
+                            onCheckedChange={(v) => handleToggleApiDomain(d.id, v)}
+                          />
+                          <span className="text-xs text-muted-foreground">
+                            {d.enabled ? (locale === 'ar' ? 'مفعّل' : 'On') : locale === 'ar' ? 'معطّل' : 'Off'}
+                          </span>
+                        </div>
+                        <Button size="sm" variant="ghost" className="text-destructive" onClick={() => handleDeleteApiDomain(d.id)}>
+                          {locale === 'ar' ? 'حذف' : 'Del'}
+                        </Button>
+                      </div>
+                    </li>
+                    );
+                  })}
+                </ul>
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </main>

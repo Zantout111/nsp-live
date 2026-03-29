@@ -21,11 +21,15 @@ import {
   Fuel,
   DollarSign,
   Globe,
+  Medal,
+  Bitcoin,
 } from 'lucide-react';
 import { numberingLatn } from '@/lib/intl-latn';
 import { DEFAULT_LOGO_SIZES, parseLogoSizes, type LogoSizes } from '@/lib/logo-sizes';
-import { DEFAULT_BRAND_LOGO, resolveLogoUrlForClient } from '@/lib/resolve-logo-url';
+import { DEFAULT_BRAND_LOGO, resolveLogoForLocale, resolveLogoUrlForClient } from '@/lib/resolve-logo-url';
 import { PriceShareButton } from '@/components/price-share-button';
+import { FooterSocialLinks, footerSocialHasAny } from '@/components/footer-social-links';
+import { AdvancedExchangeCalculator } from '@/components/advanced-exchange-calculator';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 
@@ -86,6 +90,10 @@ interface CryptoRateData {
   lastUpdated: string;
 }
 
+type HeroGridItem =
+  | { kind: 'currency'; currency: CurrencyRate }
+  | { kind: 'gold' };
+
 interface SiteSettings {
   siteName: string;
   siteNameAr: string;
@@ -94,6 +102,8 @@ interface SiteSettings {
   heroSubtitleAr: string;
   heroSubtitleEn: string;
   logoUrl: string | null;
+  logoUrlAr: string | null;
+  logoUrlNonAr: string | null;
   logoSizes?: LogoSizes | null;
   lightPrimaryColor: string;
   lightAccentColor: string;
@@ -103,6 +113,11 @@ interface SiteSettings {
   darkBgColor: string;
   /** مدة دورة شريط النشرة فوق الترويسة بالثواني */
   tickerMarqueeDurationSec?: number;
+  footerSocialFacebook?: string | null;
+  footerSocialX?: string | null;
+  footerSocialTelegram?: string | null;
+  footerSocialInstagram?: string | null;
+  footerSocialYoutube?: string | null;
 }
 
 interface RatesData {
@@ -200,8 +215,15 @@ export default function Home() {
   /** شاشة المقدمة: قيمة ابتدائية حتى يظهر الشعار الافتراضي فوراً (مهم للوصول عبر IP/شبكة بطيئة) */
   const [bootIdentity, setBootIdentity] = useState<{
     logoUrl: string | null;
+    logoUrlAr: string | null;
+    logoUrlNonAr: string | null;
     logoSizes: LogoSizes;
-  }>({ logoUrl: null, logoSizes: { ...DEFAULT_LOGO_SIZES } });
+  }>({
+    logoUrl: null,
+    logoUrlAr: null,
+    logoUrlNonAr: null,
+    logoSizes: { ...DEFAULT_LOGO_SIZES },
+  });
   const [isNewLira, setIsNewLira] = useState(false);
   const [activeTab, setActiveTab] = useState('currencies');
   const { toast } = useToast();
@@ -212,6 +234,8 @@ export default function Home() {
     const bootFrom = (s: SiteSettings) => {
       setBootIdentity({
         logoUrl: s.logoUrl ?? null,
+        logoUrlAr: s.logoUrlAr ?? null,
+        logoUrlNonAr: s.logoUrlNonAr ?? null,
         logoSizes: parseLogoSizes(s.logoSizes),
       });
     };
@@ -326,14 +350,7 @@ export default function Home() {
     return locale === 'ar' ? data.siteSettings.siteNameAr : data.siteSettings.siteNameEn;
   };
 
-  const getHeroSubtitle = () => {
-    if (!data?.siteSettings) return locale === 'ar' ? 'أسعار الصرف الحية' : 'Live Exchange Rates';
-    return locale === 'ar' ? data.siteSettings.heroSubtitleAr : data.siteSettings.heroSubtitleEn;
-  };
-
-  const getLogoUrl = () => {
-    return resolveLogoUrlForClient(data?.siteSettings?.logoUrl);
-  };
+  const getLogoUrl = () => resolveLogoForLocale(locale, data?.siteSettings);
 
   const getLogoSizes = (): LogoSizes => parseLogoSizes(data?.siteSettings?.logoSizes);
 
@@ -427,11 +444,6 @@ export default function Home() {
     return data?.rates.find(r => r.code === code);
   };
 
-  const getMiniGridRates = () => {
-    const order = ['EUR', 'TRY', 'SAR', 'EGP'] as const;
-    return order.map((code) => data?.rates.find((r) => r.code === code)).filter(Boolean) as CurrencyRate[];
-  };
-
   const getFlagUrl = (code: string) => {
     return flagUrls[code] || null;
   };
@@ -442,12 +454,33 @@ export default function Home() {
   };
 
   const usd = getFeaturedCurrency('USD');
-  const miniRates = getMiniGridRates();
+  /** USD → EUR → TRY → ذهب (أونصة) → EGP — بدل بطاقة SAR */
+  const heroGridItems: HeroGridItem[] = (() => {
+    const items: HeroGridItem[] = [];
+    if (usd) items.push({ kind: 'currency', currency: usd });
+    for (const code of ['EUR', 'TRY'] as const) {
+      const r = data?.rates.find((x) => x.code === code);
+      if (r) items.push({ kind: 'currency', currency: r });
+    }
+    if (data?.goldPrice) items.push({ kind: 'gold' });
+    const egp = data?.rates.find((r) => r.code === 'EGP');
+    if (egp) items.push({ kind: 'currency', currency: egp });
+    return items;
+  })();
 
   const tickerMarqueeSec = Math.min(
     180,
     Math.max(8, data?.siteSettings?.tickerMarqueeDurationSec ?? 42)
   );
+
+  const footerSocialUrls = {
+    facebook: data?.siteSettings?.footerSocialFacebook ?? null,
+    x: data?.siteSettings?.footerSocialX ?? null,
+    telegram: data?.siteSettings?.footerSocialTelegram ?? null,
+    instagram: data?.siteSettings?.footerSocialInstagram ?? null,
+    youtube: data?.siteSettings?.footerSocialYoutube ?? null,
+  };
+  const showFooterSocial = footerSocialHasAny(footerSocialUrls);
 
   const shareBase = data
     ? {
@@ -527,11 +560,154 @@ export default function Home() {
 
   const hasTickerContent = (data?.rates?.length ?? 0) > 0 || !!data?.goldPrice;
 
+  const heroRateCardClassName =
+    'rounded-2xl border border-white/70 bg-white/75 p-3 shadow-md shadow-slate-900/[0.06] ring-1 ring-slate-900/[0.04] backdrop-blur-sm transition-all duration-300 hover:-translate-y-0.5 hover:bg-white/95 hover:shadow-lg hover:shadow-sky-900/10 dark:border-white/10 dark:bg-white/10 dark:ring-white/5 dark:hover:bg-white/15 min-w-0';
+
+  const renderHeroRateCard = (c: CurrencyRate) => (
+    <div className={heroRateCardClassName}>
+      <div className="mb-1.5 flex items-center justify-between gap-1.5">
+        <div className="flex min-w-0 flex-1 items-center gap-1.5">
+          {getFlagUrl(c.code) ? (
+            <img
+              src={getFlagUrl(c.code)!}
+              alt=""
+              className="h-6 w-8 shrink-0 rounded-sm object-cover"
+            />
+          ) : (
+            <span className="text-lg">{c.flagEmoji}</span>
+          )}
+          <span className="truncate font-medium" title={c.code}>
+            {locale === 'ar' ? getCurrencyName(c) : c.code}
+          </span>
+          <RateDeltaBadge
+            pct={rateDeltaAvg(c.changeBuyPct, c.changeSellPct)}
+            className="shrink-0"
+          />
+        </div>
+        {shareBase && (
+          <PriceShareButton
+            {...shareBase}
+            size="icon"
+            className="h-7 w-7 shrink-0 border-white/60 bg-white/50 dark:border-white/20 dark:bg-white/10"
+            headline={getCurrencyName(c)}
+            subheadline={c.code}
+            rows={[
+              {
+                label: t('currency.buyRate'),
+                value: formatNumber(c.buyRate),
+                tone: 'buy',
+              },
+              {
+                label: t('currency.sellRate'),
+                value: formatNumber(c.sellRate),
+                tone: 'sell',
+              },
+            ]}
+            fileNameSlug={`hero-${c.code}`}
+            detailLine={`${getCurrencyName(c)} (${c.code}): ${t('currency.buyRate')} ${formatNumber(c.buyRate)} — ${t('currency.sellRate')} ${formatNumber(c.sellRate)}`}
+          />
+        )}
+      </div>
+      <div className="mt-0.5 grid grid-cols-2 gap-1.5 border-t border-slate-900/[0.06] pt-2 text-center dark:border-white/10">
+        <div>
+          <p className="text-[0.65rem] font-medium uppercase tracking-wide text-muted-foreground dark:text-white/55">
+            {t('currency.buyRate')}
+          </p>
+          <p className="text-lg font-bold tabular-nums leading-tight sm:text-xl">{formatNumber(c.buyRate)}</p>
+        </div>
+        <div>
+          <p className="text-[0.65rem] font-medium uppercase tracking-wide text-muted-foreground dark:text-white/55">
+            {t('currency.sellRate')}
+          </p>
+          <p className="text-lg font-bold tabular-nums leading-tight sm:text-xl">{formatNumber(c.sellRate)}</p>
+        </div>
+      </div>
+    </div>
+  );
+
+  const heroGoldCardClassName =
+    'rounded-2xl border border-amber-300/70 bg-gradient-to-br from-amber-50/90 to-orange-50/45 p-3 shadow-md shadow-amber-900/[0.06] ring-1 ring-amber-200/50 backdrop-blur-sm transition-all duration-300 hover:-translate-y-0.5 hover:from-amber-50 hover:to-orange-50/60 hover:shadow-lg hover:shadow-amber-900/10 dark:border-amber-500/30 dark:from-amber-500/15 dark:to-transparent dark:ring-amber-500/20 dark:hover:from-amber-500/20 min-w-0';
+
+  const renderHeroGoldCard = () => {
+    if (!data?.goldPrice) return null;
+    const gp = data.goldPrice;
+    const sypOunce = usd ? gp.priceUsd * usd.buyRate : null;
+    return (
+      <div className={heroGoldCardClassName}>
+        <div className="mb-1.5 flex items-center justify-between gap-1.5">
+          <div className="flex min-w-0 flex-1 items-start gap-1.5">
+            {/* eslint-disable-next-line @next/next/no-img-element — أيقونة ثابتة من public/sicon */}
+            <img
+              src="/sicon/gold.png"
+              alt=""
+              width={28}
+              height={28}
+              className="h-7 w-7 shrink-0 rounded-sm object-contain"
+            />
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-1">
+                <p className="truncate font-semibold text-amber-950 dark:text-amber-50">
+                  {locale === 'ar' ? 'الذهب (أونصة)' : 'Gold (oz)'}
+                </p>
+                <RateDeltaBadge pct={gp.changeOuncePct} className="shrink-0" />
+              </div>
+            </div>
+          </div>
+          {shareBase && usd && (
+            <PriceShareButton
+              {...shareBase}
+              size="icon"
+              className="h-7 w-7 shrink-0 border-amber-200/80 bg-white/50 dark:border-amber-500/30 dark:bg-white/10"
+              headline={locale === 'ar' ? 'الذهب — معاينة سريعة' : 'Gold — quick view'}
+              subheadline="XAU / USD / SYP"
+              rows={[
+                {
+                  label: locale === 'ar' ? 'أونصة (USD)' : 'Ounce (USD)',
+                  value: `$${formatUsd(gp.priceUsd, 2)}`,
+                  tone: 'neutral',
+                },
+                {
+                  label: `${locale === 'ar' ? 'أونصة' : 'Ounce'} (${getCurrencySymbol()})`,
+                  value: formatNumber(gp.priceUsd * usd.buyRate),
+                  tone: 'neutral',
+                },
+              ]}
+              fileNameSlug="gold-hero"
+              detailLine={`${locale === 'ar' ? 'الذهب' : 'Gold'}: USD/oz $${formatUsd(gp.priceUsd, 2)} · ${getCurrencySymbol()} ${formatNumber(gp.priceUsd * usd.buyRate)}`}
+            />
+          )}
+        </div>
+        <div className="mt-0.5 border-t border-amber-200/60 pt-2 dark:border-amber-500/25">
+          <div className="grid min-w-0 grid-cols-2 gap-1.5">
+            <div>
+              <p
+                className={`text-[0.65rem] font-medium tracking-wide text-amber-900/85 dark:text-amber-200/75 ${locale === 'ar' ? '' : 'uppercase'}`}
+              >
+                {locale === 'ar' ? 'الدولار' : 'USD'}
+              </p>
+              <p className="text-lg font-bold tabular-nums leading-tight text-amber-950 dark:text-amber-50 sm:text-xl">
+                ${formatUsd(gp.priceUsd, 2)}
+              </p>
+            </div>
+            <div>
+              <p className="text-[0.65rem] font-medium uppercase tracking-wide text-amber-900/85 dark:text-amber-200/75">
+                {getCurrencySymbol()}
+              </p>
+              <p className="text-lg font-bold tabular-nums leading-tight text-amber-950 dark:text-amber-50 sm:text-xl">
+                {sypOunce != null ? formatNumber(sypOunce) : '---'}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const introLh =
     bootIdentity?.logoSizes.loading ??
     parseLogoSizes(data?.siteSettings?.logoSizes).loading ??
     DEFAULT_LOGO_SIZES.loading;
-  const introLogoSrc = resolveLogoUrlForClient(bootIdentity.logoUrl);
+  const introLogoSrc = resolveLogoForLocale(locale, bootIdentity);
 
   return (
     <>
@@ -605,14 +781,15 @@ export default function Home() {
         )}
         <nav className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-4 sm:px-6 lg:px-8" aria-label="Main">
           <div className="flex min-w-0 items-center gap-2">
-            <Image
+            {/* eslint-disable-next-line @next/next/no-img-element — شعار الترويسة بدون إطار/قص دائري */}
+            <img
               src={getLogoUrl()}
               alt=""
               width={240}
               height={80}
+              decoding="async"
               style={{ height: getLogoSizes().header, width: 'auto', maxHeight: getLogoSizes().header }}
-              className="w-auto shrink-0 rounded-md object-contain"
-              unoptimized
+              className="header-site-logo w-auto shrink-0 border-0 object-contain shadow-none ring-0 outline-none"
             />
           </div>
           <div className="hidden items-center gap-1 md:flex">
@@ -688,7 +865,7 @@ export default function Home() {
       </header>
 
       <main className="relative z-10 flex-1 text-foreground dark:text-slate-100">
-        <section className="section-bg-hero relative scroll-mt-20 overflow-hidden bg-gradient-to-br from-sky-100 via-blue-50 to-slate-100/90 pb-10 pt-8 text-slate-900 sm:pt-10 lg:pb-14 dark:from-[#1e3a5f] dark:via-[#1a3052] dark:to-[#0f172a] dark:text-white">
+        <section className="section-bg-hero relative scroll-mt-20 overflow-hidden bg-gradient-to-br from-sky-100 via-blue-50 to-slate-100/90 pb-6 pt-5 text-slate-900 sm:pt-6 lg:pb-8 dark:from-[#1e3a5f] dark:via-[#1a3052] dark:to-[#0f172a] dark:text-white">
           <div
             className="pointer-events-none absolute -right-24 -top-36 z-[1] h-80 w-80 rounded-full bg-gradient-to-br from-sky-300/45 to-blue-400/25 blur-3xl dark:from-blue-500/20 dark:to-indigo-600/15"
             aria-hidden
@@ -698,170 +875,52 @@ export default function Home() {
             aria-hidden
           />
           <div className="relative z-[2] mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="grid items-center gap-8 lg:grid-cols-2">
-              <div>
-                <div className="mb-3 flex items-center gap-3">
-                  {getFlagUrl('USD') ? (
-                    <img
-                      src={getFlagUrl('USD')!}
-                      alt=""
-                      className="h-10 w-14 shrink-0 rounded-md object-cover shadow-md ring-2 ring-white/80 dark:ring-white/10"
-                    />
-                  ) : null}
-                  <div>
-                    <h1 className="text-xl font-semibold tracking-tight text-slate-900 sm:text-2xl dark:text-white/95">
-                      {locale === 'ar' ? 'سعر الدولار الأمريكي' : 'US Dollar Rate'}
-                    </h1>
-                    <p className="text-sm text-muted-foreground dark:text-white/60">{locale === 'ar' ? 'عام' : 'General'}</p>
-                  </div>
+            <header className="mb-4 text-center lg:mb-5">
+              <h1 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl lg:text-[2.5rem] dark:text-white">
+                {t('hero.brandTitle')}
+              </h1>
+              <p className="mx-auto mt-2 max-w-2xl text-base leading-snug text-slate-600 dark:text-white/75 sm:text-lg">
+                {t('hero.brandTagline')}
+              </p>
+            </header>
+            {/* موبايل: عمود واحد تحت بعض */}
+            <div className="flex flex-col gap-2 sm:gap-3 md:hidden">
+              {heroGridItems.map((item) => (
+                <div key={item.kind === 'currency' ? item.currency.code : 'gold-hero'}>
+                  {item.kind === 'currency' ? renderHeroRateCard(item.currency) : renderHeroGoldCard()}
                 </div>
-                <p className="mb-5 max-w-xl text-sm leading-relaxed text-slate-600 dark:text-white/80">{getHeroSubtitle()}</p>
-                <div className="mt-2">
-                  <div className="flex flex-wrap items-baseline gap-2 sm:gap-3">
-                    <span className="bg-gradient-to-br from-slate-900 to-slate-700 bg-clip-text text-3xl font-bold tabular-nums text-transparent sm:text-4xl lg:text-5xl dark:from-white dark:to-slate-200">
-                      {usd ? formatNumber(usd.buyRate) : '---'}
-                    </span>
-                    <span className="text-slate-300 dark:text-white/40">-</span>
-                    <span className="bg-gradient-to-br from-slate-900 to-slate-700 bg-clip-text text-3xl font-bold tabular-nums text-transparent sm:text-4xl lg:text-5xl dark:from-white dark:to-slate-200">
-                      {usd ? formatNumber(usd.sellRate) : '---'}
-                    </span>
-                    <span className="text-lg text-muted-foreground sm:text-xl dark:text-white/60">{getCurrencySymbol()}</span>
-                  </div>
-                  <p className="mt-2 text-xs text-muted-foreground sm:text-sm dark:text-white/50">
-                    {t('currency.buyRate')} — {t('currency.sellRate')}
-                  </p>
-                </div>
-                <div className="mt-4 flex flex-wrap items-center gap-4">
-                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-3 py-1 dark:bg-emerald-500/15">
-                    <RateDeltaBadge pct={usd ? rateDeltaAvg(usd.changeBuyPct, usd.changeSellPct) : null} className="text-sm" />
-                  </span>
-                  {shareBase && usd && (
-                    <PriceShareButton
-                      {...shareBase}
-                      headline={locale === 'ar' ? 'سعر الدولار الأمريكي' : 'US Dollar Rate'}
-                      subheadline="USD"
-                      rows={[
-                        {
-                          label: t('currency.buyRate'),
-                          value: formatNumber(usd.buyRate),
-                          tone: 'buy',
-                        },
-                        {
-                          label: t('currency.sellRate'),
-                          value: formatNumber(usd.sellRate),
-                          tone: 'sell',
-                        },
-                      ]}
-                      fileNameSlug="usd-hero"
-                      detailLine={`USD: ${t('currency.buyRate')} ${formatNumber(usd.buyRate)} — ${t('currency.sellRate')} ${formatNumber(usd.sellRate)}`}
-                    />
-                  )}
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3 sm:gap-4">
-                {miniRates.map((c) => (
-                  <div
-                    key={c.code}
-                    className="rounded-2xl border border-white/70 bg-white/75 p-4 shadow-md shadow-slate-900/[0.06] ring-1 ring-slate-900/[0.04] backdrop-blur-sm transition-all duration-300 hover:-translate-y-0.5 hover:bg-white/95 hover:shadow-lg hover:shadow-sky-900/10 dark:border-white/10 dark:bg-white/10 dark:ring-white/5 dark:hover:bg-white/15"
-                  >
-                    <div className="mb-2 flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        {getFlagUrl(c.code) ? (
-                          <img
-                            src={getFlagUrl(c.code)!}
-                            alt=""
-                            className="h-6 w-8 shrink-0 rounded-sm object-cover"
-                          />
-                        ) : (
-                          <span className="text-lg">{c.flagEmoji}</span>
-                        )}
-                        <span className="font-medium">{c.code}</span>
-                      </div>
-                      {shareBase && (
-                        <PriceShareButton
-                          {...shareBase}
-                          size="icon"
-                          className="h-7 w-7 shrink-0 border-white/60 bg-white/50 dark:border-white/20 dark:bg-white/10"
-                          headline={getCurrencyName(c)}
-                          subheadline={c.code}
-                          rows={[
-                            {
-                              label: t('currency.buyRate'),
-                              value: formatNumber(c.buyRate),
-                              tone: 'buy',
-                            },
-                            {
-                              label: t('currency.sellRate'),
-                              value: formatNumber(c.sellRate),
-                              tone: 'sell',
-                            },
-                          ]}
-                          fileNameSlug={`mini-${c.code}`}
-                          detailLine={`${getCurrencyName(c)} (${c.code}): ${t('currency.buyRate')} ${formatNumber(c.buyRate)} — ${t('currency.sellRate')} ${formatNumber(c.sellRate)}`}
-                        />
-                      )}
-                    </div>
-                    <div className="text-2xl font-bold tabular-nums">{formatNumber(c.buyRate)}</div>
-                    <RateDeltaBadge pct={c.changeBuyPct} className="mt-0.5" />
+              ))}
+            </div>
+            {/* تابلت: صف من 3 ثم الباقي في المنتصف */}
+            <div className="hidden flex-col gap-2 sm:gap-3 md:flex lg:hidden">
+              <div className="grid grid-cols-3 gap-2 sm:gap-3">
+                {heroGridItems.slice(0, 3).map((item) => (
+                  <div key={item.kind === 'currency' ? item.currency.code : 'gold-hero'}>
+                    {item.kind === 'currency' ? renderHeroRateCard(item.currency) : renderHeroGoldCard()}
                   </div>
                 ))}
               </div>
-            </div>
-            {data?.goldPrice && (
-              <div className="mt-8 rounded-2xl border border-amber-300/60 bg-gradient-to-br from-amber-50/95 to-orange-50/50 p-5 shadow-md shadow-amber-900/5 ring-1 ring-amber-200/50 backdrop-blur-sm dark:border-amber-500/30 dark:bg-amber-500/10 dark:from-transparent dark:to-transparent dark:ring-amber-500/20">
-                <div className="flex flex-wrap items-center justify-between gap-4">
-                  <div className="flex items-center gap-3">
-                    <span className="text-2xl" aria-hidden>
-                      🥇
-                    </span>
-                    <div>
-                      <p className="font-semibold">{locale === 'ar' ? 'الذهب (أونصة)' : 'Gold (oz)'}</p>
-                      <p className="text-sm text-muted-foreground dark:text-white/60">USD / {getCurrencySymbol()}</p>
+              {heroGridItems.length > 3 ? (
+                <div className="flex flex-wrap justify-center gap-2 sm:gap-3">
+                  {heroGridItems.slice(3).map((item) => (
+                    <div
+                      key={item.kind === 'currency' ? item.currency.code : 'gold-hero'}
+                      className="w-full max-w-[min(100%,17.5rem)] sm:max-w-[min(100%,15rem)]"
+                    >
+                      {item.kind === 'currency' ? renderHeroRateCard(item.currency) : renderHeroGoldCard()}
                     </div>
-                    {shareBase && usd && (
-                      <PriceShareButton
-                        {...shareBase}
-                        size="icon"
-                        className="h-8 w-8 border-amber-200/80 bg-white/60 dark:border-amber-500/30 dark:bg-black/20"
-                        headline={locale === 'ar' ? 'الذهب — معاينة سريعة' : 'Gold — quick view'}
-                        subheadline="XAU / USD / SYP"
-                        rows={[
-                          {
-                            label: locale === 'ar' ? 'أونصة (USD)' : 'Ounce (USD)',
-                            value: `$${formatUsd(data.goldPrice.priceUsd, 2)}`,
-                            tone: 'neutral',
-                          },
-                          {
-                            label: `${locale === 'ar' ? 'أونصة' : 'Ounce'} (${getCurrencySymbol()})`,
-                            value: formatNumber(data.goldPrice.priceUsd * usd.buyRate),
-                            tone: 'neutral',
-                          },
-                        ]}
-                        fileNameSlug="gold-hero"
-                        detailLine={`${locale === 'ar' ? 'الذهب' : 'Gold'}: USD/oz $${formatUsd(data.goldPrice.priceUsd, 2)} · ${getCurrencySymbol()} ${formatNumber(data.goldPrice.priceUsd * usd.buyRate)}`}
-                      />
-                    )}
-                  </div>
-                  <div className="flex flex-wrap gap-6 sm:text-end">
-                    <div>
-                      <p className="text-xs text-amber-800/90 dark:text-amber-200/80">USD</p>
-                      <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-                        <p className="text-xl font-bold tabular-nums text-amber-950 dark:text-inherit">
-                          ${formatUsd(data.goldPrice.priceUsd, 2)}
-                        </p>
-                        <RateDeltaBadge pct={data.goldPrice.changeOuncePct} />
-                      </div>
-                    </div>
-                    <div>
-                      <p className="text-xs text-amber-800/90 dark:text-amber-200/80">{getCurrencySymbol()}</p>
-                      <p className="text-xl font-bold tabular-nums text-amber-950 dark:text-inherit">
-                        {usd ? formatNumber(data.goldPrice.priceUsd * usd.buyRate) : '---'}
-                      </p>
-                    </div>
-                  </div>
+                  ))}
                 </div>
-              </div>
-            )}
+              ) : null}
+            </div>
+            {/* سطح المكتب: كل البطاقات بجانب بعض في صف واحد */}
+            <div className="hidden gap-2 sm:gap-3 lg:flex lg:flex-row lg:items-stretch">
+              {heroGridItems.map((item) => (
+                <div key={item.kind === 'currency' ? item.currency.code : 'gold-hero'} className="min-w-0 flex-1">
+                  {item.kind === 'currency' ? renderHeroRateCard(item.currency) : renderHeroGoldCard()}
+                </div>
+              ))}
+            </div>
           </div>
         </section>
 
@@ -870,164 +929,266 @@ export default function Home() {
           className="section-bg-rates relative mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8"
         >
           <Tabs value={activeTab} onValueChange={setActiveTab} className="relative z-[1] w-full">
-            <TabsList className="no-scrollbar mb-8 flex h-auto w-full snap-x snap-mandatory flex-nowrap justify-start gap-1 overflow-x-auto overscroll-x-contain scroll-smooth rounded-2xl border border-border/90 bg-muted/80 p-1.5 shadow-[inset_0_1px_2px_rgba(15,23,42,0.06)] dark:border-slate-700 dark:bg-slate-800/90 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] md:grid md:grid-cols-5 md:overflow-x-visible md:overscroll-auto md:snap-none">
+            <TabsList className="no-scrollbar mb-8 flex h-auto w-full flex-nowrap items-end justify-between gap-0.5 border-0 border-b border-border/70 bg-transparent p-0 shadow-none dark:border-slate-600/80 sm:gap-1 md:justify-center md:gap-x-2">
               <TabsTrigger
                 value="currencies"
-                className="min-w-[min(88vw,11.5rem)] shrink-0 snap-center rounded-xl px-2 py-2.5 text-xs text-muted-foreground transition-all duration-200 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm sm:min-w-[9.5rem] md:min-w-0 md:px-3 md:text-sm dark:text-slate-300 dark:data-[state=active]:bg-blue-500 dark:data-[state=active]:text-white"
+                className="-mb-px min-w-0 flex-1 basis-0 rounded-none border-0 border-b-2 border-transparent bg-transparent px-0.5 pb-2 pt-2 text-center text-xs font-medium text-muted-foreground shadow-none outline-none ring-0 transition-colors hover:text-foreground focus-visible:ring-0 focus-visible:outline-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none dark:text-slate-400 dark:data-[state=active]:border-sky-400 dark:data-[state=active]:text-white sm:px-2 sm:text-sm md:flex-none md:basis-auto md:px-3"
               >
-                <span className="flex flex-col items-center gap-0.5 sm:flex-row sm:gap-1.5">
-                  <Coins className="hidden h-4 w-4 sm:inline" />
-                  {locale === 'ar' ? 'العملات' : 'Currencies'}
+                <span className="flex w-full min-w-0 flex-col items-center gap-0.5 sm:flex-row sm:gap-1.5">
+                  <Coins className="h-3.5 w-3.5 shrink-0 opacity-80 sm:h-4 sm:w-4" aria-hidden />
+                  <span
+                    className="w-full truncate text-center text-[0.62rem] leading-tight sm:max-w-[9rem] sm:text-xs md:max-w-none md:text-sm"
+                    title={locale === 'ar' ? 'العملات' : 'Currencies'}
+                  >
+                    {locale === 'ar' ? 'العملات' : 'Currencies'}
+                  </span>
                 </span>
               </TabsTrigger>
               <TabsTrigger
                 value="gold"
-                className="min-w-[min(88vw,11.5rem)] shrink-0 snap-center rounded-xl px-2 py-2.5 text-xs text-muted-foreground transition-all duration-200 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm sm:min-w-[9.5rem] md:min-w-0 md:px-3 md:text-sm dark:text-slate-300 dark:data-[state=active]:bg-blue-500 dark:data-[state=active]:text-white"
+                className="-mb-px min-w-0 flex-1 basis-0 rounded-none border-0 border-b-2 border-transparent bg-transparent px-0.5 pb-2 pt-2 text-center text-xs font-medium text-muted-foreground shadow-none outline-none ring-0 transition-colors hover:text-foreground focus-visible:ring-0 focus-visible:outline-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none dark:text-slate-400 dark:data-[state=active]:border-sky-400 dark:data-[state=active]:text-white sm:px-2 sm:text-sm md:flex-none md:basis-auto md:px-3"
               >
-                <span className="flex flex-col items-center gap-0.5 sm:flex-row sm:gap-1.5">
-                  <span className="text-lg leading-none sm:text-base">🥇</span>
-                  {locale === 'ar' ? 'الذهب' : 'Gold'}
+                <span className="flex w-full min-w-0 flex-col items-center gap-0.5 sm:flex-row sm:gap-1.5">
+                  <Medal className="h-3.5 w-3.5 shrink-0 opacity-80 sm:h-4 sm:w-4" aria-hidden />
+                  <span
+                    className="w-full truncate text-center text-[0.62rem] leading-tight sm:max-w-[9rem] sm:text-xs md:max-w-none md:text-sm"
+                    title={locale === 'ar' ? 'الذهب' : 'Gold'}
+                  >
+                    {locale === 'ar' ? 'الذهب' : 'Gold'}
+                  </span>
                 </span>
               </TabsTrigger>
               <TabsTrigger
                 value="fuel"
-                className="min-w-[min(88vw,11.5rem)] shrink-0 snap-center rounded-xl px-2 py-2.5 text-xs text-muted-foreground transition-all duration-200 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm sm:min-w-[9.5rem] md:min-w-0 md:px-3 md:text-sm dark:text-slate-300 dark:data-[state=active]:bg-blue-500 dark:data-[state=active]:text-white"
+                className="-mb-px min-w-0 flex-1 basis-0 rounded-none border-0 border-b-2 border-transparent bg-transparent px-0.5 pb-2 pt-2 text-center text-xs font-medium text-muted-foreground shadow-none outline-none ring-0 transition-colors hover:text-foreground focus-visible:ring-0 focus-visible:outline-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none dark:text-slate-400 dark:data-[state=active]:border-sky-400 dark:data-[state=active]:text-white sm:px-2 sm:text-sm md:flex-none md:basis-auto md:px-3"
               >
-                <span className="flex flex-col items-center gap-0.5 sm:flex-row sm:gap-1.5">
-                  <Fuel className="hidden h-4 w-4 sm:inline" />
-                  {locale === 'ar' ? 'المحروقات' : 'Fuel'}
+                <span className="flex w-full min-w-0 flex-col items-center gap-0.5 sm:flex-row sm:gap-1.5">
+                  <Fuel className="h-3.5 w-3.5 shrink-0 opacity-80 sm:h-4 sm:w-4" aria-hidden />
+                  <span
+                    className="w-full truncate text-center text-[0.62rem] leading-tight sm:max-w-[9rem] sm:text-xs md:max-w-none md:text-sm"
+                    title={locale === 'ar' ? 'المحروقات' : 'Fuel'}
+                  >
+                    {locale === 'ar' ? 'المحروقات' : 'Fuel'}
+                  </span>
                 </span>
               </TabsTrigger>
               <TabsTrigger
                 value="forex"
-                className="min-w-[min(88vw,11.5rem)] shrink-0 snap-center rounded-xl px-2 py-2.5 text-xs text-muted-foreground transition-all duration-200 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm sm:min-w-[9.5rem] md:min-w-0 md:px-3 md:text-sm dark:text-slate-300 dark:data-[state=active]:bg-blue-500 dark:data-[state=active]:text-white"
+                className="-mb-px min-w-0 flex-1 basis-0 rounded-none border-0 border-b-2 border-transparent bg-transparent px-0.5 pb-2 pt-2 text-center text-xs font-medium text-muted-foreground shadow-none outline-none ring-0 transition-colors hover:text-foreground focus-visible:ring-0 focus-visible:outline-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none dark:text-slate-400 dark:data-[state=active]:border-sky-400 dark:data-[state=active]:text-white sm:px-2 sm:text-sm md:flex-none md:basis-auto md:px-3"
               >
-                <span className="flex flex-col items-center gap-0.5 sm:flex-row sm:gap-1.5">
-                  <DollarSign className="hidden h-4 w-4 sm:inline" />
-                  {locale === 'ar' ? 'البورصات العالمية' : 'Global markets'}
+                <span className="flex w-full min-w-0 flex-col items-center gap-0.5 sm:flex-row sm:gap-1.5">
+                  <DollarSign className="h-3.5 w-3.5 shrink-0 opacity-80 sm:h-4 sm:w-4" aria-hidden />
+                  <span
+                    className="w-full truncate text-center text-[0.62rem] leading-tight sm:max-w-[9rem] sm:text-xs md:max-w-none md:text-sm"
+                    title={locale === 'ar' ? 'البورصات العالمية' : 'Global markets'}
+                  >
+                    {locale === 'ar' ? 'البورصات العالمية' : 'Global markets'}
+                  </span>
                 </span>
               </TabsTrigger>
               <TabsTrigger
                 value="crypto"
-                className="min-w-[min(88vw,11.5rem)] shrink-0 snap-center rounded-xl px-2 py-2.5 text-xs text-muted-foreground transition-all duration-200 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm sm:min-w-[9.5rem] md:min-w-0 md:px-3 md:text-sm dark:text-slate-300 dark:data-[state=active]:bg-blue-500 dark:data-[state=active]:text-white"
+                className="-mb-px min-w-0 flex-1 basis-0 rounded-none border-0 border-b-2 border-transparent bg-transparent px-0.5 pb-2 pt-2 text-center text-xs font-medium text-muted-foreground shadow-none outline-none ring-0 transition-colors hover:text-foreground focus-visible:ring-0 focus-visible:outline-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none dark:text-slate-400 dark:data-[state=active]:border-sky-400 dark:data-[state=active]:text-white sm:px-2 sm:text-sm md:flex-none md:basis-auto md:px-3"
               >
-                <span className="flex flex-col items-center gap-0.5 sm:flex-row sm:gap-1.5">
-                  <span className="text-lg leading-none sm:text-base">₿</span>
-                  {locale === 'ar' ? 'العملات الرقمية' : 'Cryptocurrencies'}
+                <span className="flex w-full min-w-0 flex-col items-center gap-0.5 sm:flex-row sm:gap-1.5">
+                  <Bitcoin className="h-3.5 w-3.5 shrink-0 opacity-80 sm:h-4 sm:w-4" aria-hidden />
+                  <span
+                    className="w-full truncate text-center text-[0.62rem] leading-tight sm:max-w-[9rem] sm:text-xs md:max-w-none md:text-sm"
+                    title={locale === 'ar' ? 'العملات الرقمية' : 'Cryptocurrencies'}
+                  >
+                    {locale === 'ar' ? 'العملات الرقمية' : 'Cryptocurrencies'}
+                  </span>
                 </span>
               </TabsTrigger>
             </TabsList>
 
             {/* Currencies Tab */}
             <TabsContent value="currencies" className="space-y-4">
-              <div className="surface-card overflow-hidden p-6">
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b border-border dark:border-slate-600/80">
-                        <th className="text-start p-4 font-semibold text-muted-foreground">
-                          {locale === 'ar' ? 'العملة' : 'Currency'}
-                        </th>
-                        <th className="text-center p-4 font-semibold text-green-500">
-                          <div className="flex items-center justify-center gap-1">
-                            <TrendingDown className="w-4 h-4" />
+              <div className="surface-card overflow-hidden p-4 sm:p-6">
+                {/* جوال: بطاقات عمودية بعرض الشاشة — بلا تمرير أفقي */}
+                <div className="flex min-w-0 flex-col gap-3 md:hidden">
+                  {(data?.rates ?? []).map((currency, index) => (
+                    <div
+                      key={currency.id}
+                      className="animate-fade-in-up min-w-0 rounded-xl border border-border/80 bg-muted/25 p-3 dark:border-slate-600/50 dark:bg-slate-800/40"
+                      style={{ animationDelay: `${index * 0.03}s` }}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex min-w-0 flex-1 items-center gap-2">
+                          <div className="h-7 w-10 shrink-0 overflow-hidden rounded-md shadow-sm ring-1 ring-black/10 dark:ring-white/10">
+                            {getFlagUrl(currency.code) ? (
+                              <img
+                                src={getFlagUrl(currency.code)!}
+                                alt=""
+                                className="h-full w-full object-cover"
+                              />
+                            ) : (
+                              <div className="flex h-full w-full items-center justify-center bg-muted text-base">
+                                {currency.flagEmoji || '💱'}
+                              </div>
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="truncate font-semibold leading-tight">{getCurrencyName(currency)}</p>
+                            <p className="text-xs text-muted-foreground font-mono">{currency.code}</p>
+                          </div>
+                        </div>
+                        {shareBase ? (
+                          <div className="shrink-0">
+                            <PriceShareButton
+                              {...shareBase}
+                              headline={getCurrencyName(currency)}
+                              subheadline={`${currency.code} · ${currency.symbol?.trim() || currency.code}`}
+                              rows={[
+                                {
+                                  label: t('currency.buyRate'),
+                                  value: formatNumber(currency.buyRate),
+                                  tone: 'buy',
+                                },
+                                {
+                                  label: t('currency.sellRate'),
+                                  value: formatNumber(currency.sellRate),
+                                  tone: 'sell',
+                                },
+                              ]}
+                              fileNameSlug={`rate-${currency.code}`}
+                              detailLine={`${getCurrencyName(currency)} (${currency.code}): ${t('currency.buyRate')} ${formatNumber(currency.buyRate)} — ${t('currency.sellRate')} ${formatNumber(currency.sellRate)}`}
+                            />
+                          </div>
+                        ) : null}
+                      </div>
+                      <div className="mt-3 grid min-w-0 grid-cols-2 gap-2">
+                        <div className="min-w-0 rounded-lg bg-green-500/10 px-2 py-2 text-center dark:bg-green-500/[0.08]">
+                          <div className="flex items-center justify-center gap-0.5 text-[0.65rem] font-medium text-green-700 dark:text-green-400">
+                            <TrendingDown className="h-3 w-3" aria-hidden />
                             {t('currency.buyRate')}
                           </div>
-                        </th>
-                        <th className="text-center p-4 font-semibold text-red-500">
-                          <div className="flex items-center justify-center gap-1">
-                            <TrendingUp className="w-4 h-4" />
+                          <p className="mt-0.5 truncate text-base font-bold tabular-nums text-green-600 dark:text-green-400">
+                            {formatNumber(currency.buyRate)}
+                          </p>
+                          <div className="mt-1 flex justify-center">
+                            <RateDeltaBadge pct={currency.changeBuyPct} subLabel={t('rateDelta.buyShort')} />
+                          </div>
+                        </div>
+                        <div className="min-w-0 rounded-lg bg-red-500/10 px-2 py-2 text-center dark:bg-red-500/[0.08]">
+                          <div className="flex items-center justify-center gap-0.5 text-[0.65rem] font-medium text-red-700 dark:text-red-400">
+                            <TrendingUp className="h-3 w-3" aria-hidden />
                             {t('currency.sellRate')}
                           </div>
-                        </th>
-                        <th className="hidden p-3 text-center text-xs font-semibold text-muted-foreground sm:table-cell sm:p-4 sm:text-sm">
-                          {t('rateDelta.sinceLast')}
-                        </th>
-                        <th className="text-end p-4 font-semibold text-muted-foreground hidden sm:table-cell">
-                          {locale === 'ar' ? 'الرمز' : 'Code'}
-                        </th>
-                        <th className="w-[1%] whitespace-nowrap p-4 text-center font-semibold text-muted-foreground">
-                          {t('currency.shareRate')}
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(data?.rates ?? []).map((currency, index) => (
-                        <tr 
-                          key={currency.id} 
-                          className="animate-fade-in-up border-b border-border/80 transition-colors hover:bg-muted/70 dark:border-slate-700/60 dark:hover:bg-slate-700/40"
-                          style={{ animationDelay: `${index * 0.03}s` }}
-                        >
-                          <td className="p-4">
-                            <div className="flex items-center gap-3">
-                              <div className="w-10 h-7 flex-shrink-0 overflow-hidden rounded-md shadow-md ring-1 ring-black/10 dark:ring-white/10">
-                                {getFlagUrl(currency.code) ? (
-                                  <img 
-                                    src={getFlagUrl(currency.code)!} 
-                                    alt={currency.code}
-                                    className="w-full h-full object-cover"
-                                  />
-                                ) : (
-                                  <div className="w-full h-full bg-muted flex items-center justify-center text-lg">
-                                    {currency.flagEmoji || '💱'}
-                                  </div>
-                                )}
-                              </div>
-                              <div>
-                                <p className="font-semibold">{getCurrencyName(currency)}</p>
-                                <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 sm:hidden">
-                                  <RateDeltaBadge pct={currency.changeBuyPct} subLabel={t('rateDelta.buyShort')} />
-                                  <RateDeltaBadge pct={currency.changeSellPct} subLabel={t('rateDelta.sellShort')} />
+                          <p className="mt-0.5 truncate text-base font-bold tabular-nums text-red-600 dark:text-red-400">
+                            {formatNumber(currency.sellRate)}
+                          </p>
+                          <div className="mt-1 flex justify-center">
+                            <RateDeltaBadge pct={currency.changeSellPct} subLabel={t('rateDelta.sellShort')} />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* شاشات أوسع: جدول */}
+                <div className="hidden min-w-0 md:block">
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-0 table-auto">
+                      <thead>
+                        <tr className="border-b border-border dark:border-slate-600/80">
+                          <th className="p-3 text-start text-sm font-semibold text-muted-foreground md:p-4">
+                            {locale === 'ar' ? 'العملة' : 'Currency'}
+                          </th>
+                          <th className="p-3 text-center text-sm font-semibold text-green-500 md:p-4">
+                            <div className="flex items-center justify-center gap-1">
+                              <TrendingDown className="h-4 w-4" />
+                              {t('currency.buyRate')}
+                            </div>
+                          </th>
+                          <th className="p-3 text-center text-sm font-semibold text-red-500 md:p-4">
+                            <div className="flex items-center justify-center gap-1">
+                              <TrendingUp className="h-4 w-4" />
+                              {t('currency.sellRate')}
+                            </div>
+                          </th>
+                          <th className="hidden p-3 text-center text-xs font-semibold text-muted-foreground sm:table-cell sm:p-4 sm:text-sm">
+                            {t('rateDelta.sinceLast')}
+                          </th>
+                          <th className="hidden p-4 text-end text-sm font-semibold text-muted-foreground sm:table-cell">
+                            {locale === 'ar' ? 'الرمز' : 'Code'}
+                          </th>
+                          <th className="w-[1%] whitespace-nowrap p-3 text-center text-sm font-semibold text-muted-foreground md:p-4">
+                            {t('currency.shareRate')}
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(data?.rates ?? []).map((currency, index) => (
+                          <tr
+                            key={currency.id}
+                            className="animate-fade-in-up border-b border-border/80 transition-colors hover:bg-muted/70 dark:border-slate-700/60 dark:hover:bg-slate-700/40"
+                            style={{ animationDelay: `${index * 0.03}s` }}
+                          >
+                            <td className="p-3 md:p-4">
+                              <div className="flex items-center gap-3">
+                                <div className="h-7 w-10 shrink-0 overflow-hidden rounded-md shadow-md ring-1 ring-black/10 dark:ring-white/10">
+                                  {getFlagUrl(currency.code) ? (
+                                    <img
+                                      src={getFlagUrl(currency.code)!}
+                                      alt={currency.code}
+                                      className="h-full w-full object-cover"
+                                    />
+                                  ) : (
+                                    <div className="flex h-full w-full items-center justify-center bg-muted text-lg">
+                                      {currency.flagEmoji || '💱'}
+                                    </div>
+                                  )}
+                                </div>
+                                <div>
+                                  <p className="font-semibold">{getCurrencyName(currency)}</p>
                                 </div>
                               </div>
-                            </div>
-                          </td>
-                          <td className="p-4 text-center">
-                            <span className="text-lg font-bold text-green-500">
-                              {formatNumber(currency.buyRate)}
-                            </span>
-                          </td>
-                          <td className="p-4 text-center">
-                            <span className="text-lg font-bold text-red-500">
-                              {formatNumber(currency.sellRate)}
-                            </span>
-                          </td>
-                          <td className="hidden p-3 align-middle sm:table-cell sm:p-4">
-                            <div className="flex flex-col items-center gap-1">
-                              <RateDeltaBadge pct={currency.changeBuyPct} subLabel={t('rateDelta.buyShort')} />
-                              <RateDeltaBadge pct={currency.changeSellPct} subLabel={t('rateDelta.sellShort')} />
-                            </div>
-                          </td>
-                          <td className="p-4 text-end hidden sm:table-cell">
-                            <span className="text-sm text-muted-foreground font-mono">{currency.code}</span>
-                          </td>
-                          <td className="p-2 text-center align-middle">
-                            {shareBase && (
-                              <PriceShareButton
-                                {...shareBase}
-                                headline={getCurrencyName(currency)}
-                                subheadline={`${currency.code} · ${currency.symbol?.trim() || currency.code}`}
-                                rows={[
-                                  {
-                                    label: t('currency.buyRate'),
-                                    value: formatNumber(currency.buyRate),
-                                    tone: 'buy',
-                                  },
-                                  {
-                                    label: t('currency.sellRate'),
-                                    value: formatNumber(currency.sellRate),
-                                    tone: 'sell',
-                                  },
-                                ]}
-                                fileNameSlug={`rate-${currency.code}`}
-                                detailLine={`${getCurrencyName(currency)} (${currency.code}): ${t('currency.buyRate')} ${formatNumber(currency.buyRate)} — ${t('currency.sellRate')} ${formatNumber(currency.sellRate)}`}
-                              />
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                            </td>
+                            <td className="p-3 text-center md:p-4">
+                              <span className="text-lg font-bold text-green-500">{formatNumber(currency.buyRate)}</span>
+                            </td>
+                            <td className="p-3 text-center md:p-4">
+                              <span className="text-lg font-bold text-red-500">{formatNumber(currency.sellRate)}</span>
+                            </td>
+                            <td className="hidden p-3 align-middle sm:table-cell sm:p-4">
+                              <div className="flex flex-col items-center gap-1">
+                                <RateDeltaBadge pct={currency.changeBuyPct} subLabel={t('rateDelta.buyShort')} />
+                                <RateDeltaBadge pct={currency.changeSellPct} subLabel={t('rateDelta.sellShort')} />
+                              </div>
+                            </td>
+                            <td className="hidden p-4 text-end sm:table-cell">
+                              <span className="font-mono text-sm text-muted-foreground">{currency.code}</span>
+                            </td>
+                            <td className="p-2 text-center align-middle">
+                              {shareBase && (
+                                <PriceShareButton
+                                  {...shareBase}
+                                  headline={getCurrencyName(currency)}
+                                  subheadline={`${currency.code} · ${currency.symbol?.trim() || currency.code}`}
+                                  rows={[
+                                    {
+                                      label: t('currency.buyRate'),
+                                      value: formatNumber(currency.buyRate),
+                                      tone: 'buy',
+                                    },
+                                    {
+                                      label: t('currency.sellRate'),
+                                      value: formatNumber(currency.sellRate),
+                                      tone: 'sell',
+                                    },
+                                  ]}
+                                  fileNameSlug={`rate-${currency.code}`}
+                                  detailLine={`${getCurrencyName(currency)} (${currency.code}): ${t('currency.buyRate')} ${formatNumber(currency.buyRate)} — ${t('currency.sellRate')} ${formatNumber(currency.sellRate)}`}
+                                />
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             </TabsContent>
@@ -1037,7 +1198,15 @@ export default function Home() {
               {data?.goldPrice && (
                 <div className="surface-card p-6">
                   <CardTitle className="mb-6 flex items-center gap-2 text-xl font-semibold text-foreground dark:text-slate-100">
-                    🥇 {locale === 'ar' ? 'أسعار الذهب' : 'Gold Prices'}
+                    {/* eslint-disable-next-line @next/next/no-img-element — مطابقة بطاقة الهيرو: public/sicon/gold.png */}
+                    <img
+                      src="/sicon/gold.png"
+                      alt=""
+                      width={28}
+                      height={28}
+                      className="h-7 w-7 shrink-0 rounded-sm object-contain"
+                    />
+                    {locale === 'ar' ? 'أسعار الذهب' : 'Gold Prices'}
                   </CardTitle>
                   <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                     {[
@@ -1360,20 +1529,26 @@ export default function Home() {
         </section>
 
         {/* Calculator Section */}
-        <section className="section-bg-calculator relative mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        <section
+          id="currency-calculator"
+          className="section-bg-calculator relative mx-auto max-w-7xl scroll-mt-20 px-4 py-8 sm:px-6 lg:px-8"
+        >
           <div className="surface-card relative z-[1] p-6">
-            <CardTitle className="mb-6 flex items-center gap-2 text-xl font-semibold text-foreground dark:text-slate-100">
+            <CardTitle className="mb-2 flex items-center gap-2 text-xl font-semibold text-foreground dark:text-slate-100">
               <ArrowRightLeft className="h-5 w-5" />
-              {locale === 'ar' ? 'حاسبة العملات' : 'Currency Calculator'}
+              {t('calculator.advancedPageTitle')}
             </CardTitle>
-            <QuickCalculator 
-              rates={data?.rates || []} 
-              t={t} 
-              locale={locale} 
-              formatNumber={formatNumber} 
-              getCurrencyName={getCurrencyName}
-              isNewLira={isNewLira}
+            <p className="mb-6 text-sm text-muted-foreground dark:text-slate-400">{t('calculator.advancedSubtitle')}</p>
+            <AdvancedExchangeCalculator
+              rates={data?.rates || []}
+              goldPrice={data?.goldPrice ?? null}
+              fuelPrices={data?.fuelPrices || []}
+              forexRates={data?.forexRates || []}
+              cryptoRates={data?.cryptoRates || []}
+              locale={locale}
+              formatNumber={formatNumber}
               getCurrencySymbol={getCurrencySymbol}
+              t={t}
             />
           </div>
         </section>
@@ -1381,8 +1556,89 @@ export default function Home() {
 
       {/* Footer */}
       <footer className="section-bg-footer relative z-10 mt-auto border-t border-border/80 bg-gradient-to-b from-muted/30 to-muted/50 py-8 text-muted-foreground dark:border-white/10 dark:from-[#0f172a] dark:to-[#0c1222] dark:text-slate-400">
-        <div className="relative z-[1] mx-auto flex max-w-7xl flex-col items-center justify-center gap-3 px-4 text-sm sm:px-6 lg:px-8">
-          <div className="flex items-center gap-2">
+        <div className="relative z-[1] mx-auto max-w-7xl px-4 text-sm sm:px-6 lg:px-8">
+          <div
+            className={cn(
+              'grid justify-items-center gap-8 text-center',
+              showFooterSocial
+                ? 'md:grid-cols-2 lg:grid-cols-3 lg:gap-10 xl:gap-12'
+                : 'md:grid-cols-2 md:gap-10 lg:gap-12'
+            )}
+          >
+            <div className="flex min-w-0 max-w-md flex-col items-center">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-foreground/80 dark:text-slate-300">
+                {t('footer.quickLinks')}
+              </p>
+              <nav className="flex flex-col items-center gap-2" aria-label={t('footer.quickLinksAria')}>
+                <Link
+                  href="/privacy"
+                  className="text-foreground/75 underline-offset-4 transition-colors hover:text-foreground hover:underline dark:text-slate-400 dark:hover:text-slate-200"
+                >
+                  {t('footer.privacy')}
+                </Link>
+                <Link
+                  href="/about"
+                  className="text-foreground/75 underline-offset-4 transition-colors hover:text-foreground hover:underline dark:text-slate-400 dark:hover:text-slate-200"
+                >
+                  {t('footer.about')}
+                </Link>
+                <Link
+                  href="/api-access"
+                  className="text-foreground/75 underline-offset-4 transition-colors hover:text-foreground hover:underline dark:text-slate-400 dark:hover:text-slate-200"
+                >
+                  {t('footer.api')}
+                </Link>
+              </nav>
+            </div>
+            <div className="flex min-w-0 max-w-lg flex-col items-center">
+              <p className="mb-4 text-sm leading-relaxed text-muted-foreground dark:text-slate-400">
+                {t('footer.siteImportance')}
+              </p>
+              {data.lastUpdate ? (
+                <p className="mb-4 flex justify-center gap-2 text-xs text-muted-foreground dark:text-slate-400">
+                  <Clock className="mt-0.5 h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
+                  <span className="text-balance">
+                    <span className="font-medium text-foreground/70 dark:text-slate-300">
+                      {t('footer.lastUpdatedLabel')}
+                    </span>{' '}
+                    {formatLastUpdateForShare(data.lastUpdate)}
+                  </span>
+                </p>
+              ) : null}
+              <nav className="flex flex-col items-center gap-2" aria-label={t('footer.helpfulNavAria')}>
+                <a
+                  href="#rates-panel"
+                  className="text-foreground/75 underline-offset-4 transition-colors hover:text-foreground hover:underline dark:text-slate-400 dark:hover:text-slate-200"
+                >
+                  {t('footer.jumpRates')}
+                </a>
+                <a
+                  href="#currency-calculator"
+                  className="text-foreground/75 underline-offset-4 transition-colors hover:text-foreground hover:underline dark:text-slate-400 dark:hover:text-slate-200"
+                >
+                  {t('footer.jumpCalculator')}
+                </a>
+              </nav>
+            </div>
+            {showFooterSocial ? (
+              <div className="flex min-w-0 max-w-md flex-col items-center">
+                <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-foreground/80 dark:text-slate-300">
+                  {t('footer.social')}
+                </p>
+                <div className="flex justify-center">
+                  <FooterSocialLinks
+                    urls={footerSocialUrls}
+                    labelFacebook={t('footer.socialFacebook')}
+                    labelX={t('footer.socialX')}
+                    labelTelegram={t('footer.socialTelegram')}
+                    labelInstagram={t('footer.socialInstagram')}
+                    labelYoutube={t('footer.socialYoutube')}
+                  />
+                </div>
+              </div>
+            ) : null}
+          </div>
+          <div className="mt-10 flex flex-col items-center gap-2 border-t border-border/60 pt-8 text-center dark:border-white/10">
             <Image
               src={getLogoUrl()}
               alt=""
@@ -1392,22 +1648,10 @@ export default function Home() {
               className="rounded object-contain"
               unoptimized
             />
-            <span className="text-foreground/80 dark:text-slate-300">{getSiteName()} © {new Date().getFullYear()}</span>
+            <span className="text-foreground/80 dark:text-slate-300">
+              {getSiteName()} © {new Date().getFullYear()}
+            </span>
           </div>
-          <nav className="flex flex-wrap items-center justify-center gap-x-5 gap-y-1" aria-label="Legal">
-            <Link
-              href="/privacy"
-              className="text-foreground/75 underline-offset-4 transition-colors hover:text-foreground hover:underline dark:text-slate-400 dark:hover:text-slate-200"
-            >
-              {t('footer.privacy')}
-            </Link>
-            <Link
-              href="/about"
-              className="text-foreground/75 underline-offset-4 transition-colors hover:text-foreground hover:underline dark:text-slate-400 dark:hover:text-slate-200"
-            >
-              {t('footer.about')}
-            </Link>
-          </nav>
         </div>
       </footer>
     </div>
@@ -1424,132 +1668,3 @@ export default function Home() {
   );
 }
 
-function QuickCalculator({ 
-  rates, 
-  t, 
-  locale, 
-  formatNumber,
-  getCurrencyName,
-  isNewLira,
-  getCurrencySymbol
-}: { 
-  rates: CurrencyRate[]; 
-  t: (key: string) => string;
-  locale: string;
-  formatNumber: (num: number, decimals?: number, opts?: { noNewLira?: boolean }) => string;
-  getCurrencyName: (currency: CurrencyRate) => string;
-  isNewLira: boolean;
-  getCurrencySymbol: () => string;
-}) {
-  const [amount, setAmount] = useState('100');
-  const [selectedCurrency, setSelectedCurrency] = useState('USD');
-  const [direction, setDirection] = useState<'toSYP' | 'fromSYP'>('toSYP');
-
-  const selectedRate = rates.find(r => r.code === selectedCurrency);
-  
-  /** ناتج بالليرة القديمة (toSYP) أو بالعملة الأجنبية (fromSYP) — بدون قسمة 100 هنا */
-  const calculateResult = () => {
-    const amt = parseFloat(amount) || 0;
-    if (!selectedRate) return 0;
-    if (direction === 'toSYP') {
-      return amt * selectedRate.sellRate;
-    }
-    return amt / selectedRate.buyRate;
-  };
-
-  const formatResultDisplay = () => {
-    const raw = calculateResult();
-    if (direction === 'fromSYP') {
-      return formatNumber(raw, 8, { noNewLira: true });
-    }
-    return formatNumber(raw);
-  };
-
-  const getCurrencyLabel = () => {
-    if (direction === 'toSYP') {
-      return getCurrencySymbol();
-    }
-    return selectedCurrency;
-  };
-
-  const getFlagUrl = (code: string) => {
-    const flagUrls: Record<string, string> = {
-      USD: 'https://flagcdn.com/w40/us.png',
-      EUR: 'https://flagcdn.com/w40/eu.png',
-      TRY: 'https://flagcdn.com/w40/tr.png',
-      SAR: 'https://flagcdn.com/w40/sa.png',
-      AED: 'https://flagcdn.com/w40/ae.png',
-      GBP: 'https://flagcdn.com/w40/gb.png',
-      CHF: 'https://flagcdn.com/w40/ch.png',
-      CAD: 'https://flagcdn.com/w40/ca.png',
-      AUD: 'https://flagcdn.com/w40/au.png',
-      JOD: 'https://flagcdn.com/w40/jo.png',
-      KWD: 'https://flagcdn.com/w40/kw.png',
-      EGP: 'https://flagcdn.com/w40/eg.png',
-      LYD: 'https://flagcdn.com/w40/ly.png',
-    };
-    return flagUrls[code] || null;
-  };
-
-  return (
-    <div className="grid md:grid-cols-4 gap-4 items-end">
-      <div>
-        <Label className="text-sm font-medium">{locale === 'ar' ? 'المبلغ' : 'Amount'}</Label>
-        <Input
-          type="number"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          className="mt-2 h-11 rounded-md border border-input bg-background text-foreground dark:border-slate-600 dark:bg-slate-900/80 dark:text-slate-100"
-        />
-      </div>
-      <div>
-        <Label className="text-sm font-medium">{locale === 'ar' ? 'العملة' : 'Currency'}</Label>
-        <select
-          value={selectedCurrency}
-          onChange={(e) => setSelectedCurrency(e.target.value)}
-          className="mt-2 h-11 w-full cursor-pointer rounded-md border border-input bg-background px-3 text-sm text-foreground dark:border-slate-600 dark:bg-slate-900/80 dark:text-slate-100"
-        >
-          {rates.map(r => (
-            <option key={r.code} value={r.code}>
-              {getCurrencyName(r)} ({r.code})
-            </option>
-          ))}
-        </select>
-      </div>
-      <div>
-        <Label className="text-sm font-medium">{locale === 'ar' ? 'العملية' : 'Operation'}</Label>
-        <div className="flex gap-2 mt-2">
-          <Button
-            size="sm"
-            variant={direction === 'toSYP' ? 'default' : 'outline'}
-            onClick={() => setDirection('toSYP')}
-            className="flex-1 h-11"
-          >
-            {isNewLira 
-              ? (locale === 'ar' ? 'إلى ل.ج' : 'To NSP')
-              : t('calculator.toSyp')
-            }
-          </Button>
-          <Button
-            size="sm"
-            variant={direction === 'fromSYP' ? 'default' : 'outline'}
-            onClick={() => setDirection('fromSYP')}
-            className="flex-1 h-11"
-          >
-            {isNewLira 
-              ? (locale === 'ar' ? 'من ل.ج' : 'From NSP')
-              : t('calculator.fromSyp')
-            }
-          </Button>
-        </div>
-      </div>
-      <div className="rounded-xl border border-primary/30 bg-primary/10 p-4 text-center dark:border-blue-500/40 dark:bg-blue-500/10">
-        <p className="mb-1 text-sm text-primary dark:text-blue-300">{locale === 'ar' ? 'النتيجة' : 'Result'}</p>
-        <p className="text-2xl font-bold text-primary dark:text-blue-200">{formatResultDisplay()}</p>
-        <p className="text-xs text-muted-foreground">
-          {getCurrencyLabel()}
-        </p>
-      </div>
-    </div>
-  );
-}

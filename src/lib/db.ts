@@ -46,6 +46,8 @@ export async function ensureSqliteSchema(): Promise<void> {
   await tryAlter(
     `ALTER TABLE SiteSettings ADD COLUMN tickerMarqueeDurationSec INTEGER NOT NULL DEFAULT 42`
   );
+  await tryAlter(`ALTER TABLE SiteSettings ADD COLUMN logoUrlAr TEXT`);
+  await tryAlter(`ALTER TABLE SiteSettings ADD COLUMN logoUrlNonAr TEXT`);
 
   await tryAlter(`ALTER TABLE ExchangeRate ADD COLUMN prevBuyRate REAL`);
   await tryAlter(`ALTER TABLE ExchangeRate ADD COLUMN prevSellRate REAL`);
@@ -57,6 +59,18 @@ export async function ensureSqliteSchema(): Promise<void> {
 
   await tryAlter(`ALTER TABLE FuelPrice ADD COLUMN prevPrice REAL`);
   await tryAlter(`ALTER TABLE FuelPrice ADD COLUMN prevCapturedAt DATETIME`);
+
+  await tryAlter(`ALTER TABLE SiteSettings ADD COLUMN platformApiUsdtTrc20 TEXT`);
+  await tryAlter(`ALTER TABLE SiteSettings ADD COLUMN platformApiSubscriptionPriceUsd REAL NOT NULL DEFAULT 50`);
+  await tryAlter(`ALTER TABLE SiteSettings ADD COLUMN platformApiSubscriptionDays INTEGER NOT NULL DEFAULT 365`);
+
+  await tryAlter(`ALTER TABLE ApiAllowedDomain ADD COLUMN expiresAt DATETIME`);
+
+  await tryAlter(`ALTER TABLE SiteSettings ADD COLUMN footerSocialFacebook TEXT`);
+  await tryAlter(`ALTER TABLE SiteSettings ADD COLUMN footerSocialX TEXT`);
+  await tryAlter(`ALTER TABLE SiteSettings ADD COLUMN footerSocialTelegram TEXT`);
+  await tryAlter(`ALTER TABLE SiteSettings ADD COLUMN footerSocialInstagram TEXT`);
+  await tryAlter(`ALTER TABLE SiteSettings ADD COLUMN footerSocialYoutube TEXT`);
 
   sqliteSchemaEnsured = true;
 }

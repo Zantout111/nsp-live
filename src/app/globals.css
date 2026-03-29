@@ -812,6 +812,14 @@ html.dark .admin-panel {
   border-bottom: none;
 }
 
+/* شعار الترويسة: بدون زوايا دائرية أو حلقات/ظل يُشبه الإطار */
+.spt-header .header-site-logo {
+  border-radius: 0;
+  border: none;
+  box-shadow: none;
+  outline: none;
+}
+
 /* ============================================
    TABS STYLES
    ============================================ */

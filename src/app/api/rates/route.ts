@@ -1,10 +1,11 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { parseLogoSizes, type LogoSizes } from '@/lib/logo-sizes';
 import { db, ensureSqliteSchema } from '@/lib/db';
 import { ensureForexCryptoSeeded } from '@/lib/seed-forex-crypto';
 import { upsertExchangeRateWithSnapshot } from '@/lib/rate-snapshot';
 import { pctDeltaFromPrevious } from '@/lib/pct-delta';
 import ZAI from 'z-ai-web-dev-sdk';
+import { ratesApiOriginDenied } from '@/lib/api-origin-guard';
 
 export const dynamic = 'force-dynamic';
 
@@ -170,9 +171,12 @@ async function checkAutoUpdate() {
   }
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     await ensureSqliteSchema();
+    const denied = await ratesApiOriginDenied(request);
+    if (denied) return denied;
+
     // Auto-initialize if needed (يشمل بذر الفوركس/الرقميات إن وُجدت الجداول فارغة)
     await initializeDatabase();
 
@@ -256,6 +260,8 @@ export async function GET() {
           heroSubtitleAr: settings?.heroSubtitleAr || 'أسعار الصرف الحية',
           heroSubtitleEn: settings?.heroSubtitleEn || 'Live Exchange Rates',
           logoUrl: settings?.logoUrl || null,
+          logoUrlAr: settings?.logoUrlAr ?? null,
+          logoUrlNonAr: settings?.logoUrlNonAr ?? null,
           logoSizes: parseLogoSizes(settings?.logoSizes) as LogoSizes,
           // Visual Identity - Light Mode
           lightPrimaryColor: settings?.lightPrimaryColor || '#0ea5e9',
@@ -266,6 +272,11 @@ export async function GET() {
           darkAccentColor: settings?.darkAccentColor || '#38bdf8',
           darkBgColor: settings?.darkBgColor || '#0f172a',
           tickerMarqueeDurationSec: settings?.tickerMarqueeDurationSec ?? 42,
+          footerSocialFacebook: settings?.footerSocialFacebook ?? null,
+          footerSocialX: settings?.footerSocialX ?? null,
+          footerSocialTelegram: settings?.footerSocialTelegram ?? null,
+          footerSocialInstagram: settings?.footerSocialInstagram ?? null,
+          footerSocialYoutube: settings?.footerSocialYoutube ?? null,
         }
       }
     });

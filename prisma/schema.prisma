@@ -110,7 +110,9 @@ model SiteSettings {
   heroSubtitle      String?  @default("أسعار الصرف الحية") // النص تحت العنوان
   heroSubtitleAr    String?  @default("أسعار الصرف الحية")
   heroSubtitleEn    String?  @default("Live Exchange Rates")
-  logoUrl           String?  // رابط الشعار
+  logoUrl           String?  // رابط الشعار (قديم؛ يُستخدم احتياطياً إن لم تُضبط القيمتان أدناه)
+  logoUrlAr         String?  // شعار واجهة اللغة العربية
+  logoUrlNonAr      String?  // شعار باقي اللغات (en, sv, de, fr, …)
   logoSizes         Json?    // { header, footer, loading } ارتفاع الشعار بالبكسل لكل موضع
   /// مدة دورة شريط النشرة فوق الترويسة (ثوانٍ؛ أقل = أسرع)
   tickerMarqueeDurationSec Int @default(42)
@@ -133,4 +135,54 @@ model SiteSettings {
   darkPrimaryColor  String?  @default("#0ea5e9")  // اللون الأساسي
   darkAccentColor   String?  @default("#38bdf8")  // اللون المميز
   darkBgColor       String?  @default("#0f172a")  // لون الخلفية
+
+  /// عنوان USDT (TRC20) لعرضه في صفحة طلب وصول الـ API
+  platformApiUsdtTrc20 String?
+  /// سعر اشتراك واجهة API المعروض للمستخدم (USD)
+  platformApiSubscriptionPriceUsd Float @default(50)
+  /// مدة الاشتراك باليوم (مثلاً 365 = سنة) ثم يُعطّل النطاق تلقائياً
+  platformApiSubscriptionDays   Int   @default(365)
+
+  /// روابط التواصل الاجتماعي في التذييل (فارغ = إخفاء الزر)
+  footerSocialFacebook   String?
+  footerSocialX          String?
+  footerSocialTelegram   String?
+  footerSocialInstagram  String?
+  footerSocialYoutube    String?
+}
+
+enum ApiAccessRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model ApiAccessRequest {
+  id              String                 @id @default(cuid())
+  fullName        String
+  email           String
+  phone           String
+  websiteName     String
+  websiteUrl      String
+  usagePurpose    String
+  programmingType String
+  receiptImageUrl String?
+  status          ApiAccessRequestStatus @default(PENDING)
+  adminNote       String?
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  domains         ApiAllowedDomain[]
+}
+
+model ApiAllowedDomain {
+  id        String              @id @default(cuid())
+  domain    String              @unique
+  enabled   Boolean             @default(true)
+  /// بعد هذا التاريخ يُعطّل النطاق تلقائياً (null = بدون انتهاء؛ سجلات قديمة)
+  expiresAt DateTime?
+  requestId String?
+  request   ApiAccessRequest?   @relation(fields: [requestId], references: [id], onDelete: SetNull)
+  note      String?
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
 }
