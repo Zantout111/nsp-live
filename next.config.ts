@@ -44,7 +44,8 @@ const nextConfig: NextConfig = {
   // Use webpack instead of turbopack to avoid cache corruption issues
   // Copy database and messages to standalone build
   outputFileTracingIncludes: {
-    '/*': ['./db/**/*', './messages/**/*'],
+    // Next 16 + npm overrides: يجب تضمين الحزمة كاملة وإلا standalone يفشل عند التشغيل (MODULE_NOT_FOUND @swc/helpers)
+    '/*': ['./db/**/*', './messages/**/*', './node_modules/@swc/helpers/**/*'],
   },
   allowedDevOrigins: [
     'preview-chat-58e713bf-deb4-46e9-83be-0f2e91c630df.space.z.ai',
