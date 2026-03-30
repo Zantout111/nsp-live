@@ -36,17 +36,24 @@ export function resolveLogoUrlForClient(logoUrl: string | null | undefined): str
   return raw;
 }
 
-/** يختار رابط الشعار المخزَّن حسب اللغة (عربي مقابل باقي اللغات) مع الرجوع للحقل القديم logoUrl */
+/**
+ * يختار رابط الشعار حسب اللغة.
+ * العربية: logoUrlAr ثم الحقل القديم logoUrl.
+ * باقي اللغات: logoUrlNonAr ثم logoUrl ثم logoUrlAr — حتى يظهر شعار مرفوع من خانة العربية
+ * إن لم يُرفع شعار منفصل لغير العربية (بدلاً من البقاء على logo.svg الافتراضي دون سبب واضح).
+ */
 export function pickLogoStorageUrl(
   locale: string,
   s: LogoSettingsSlice | null | undefined
 ): string | null {
   if (!s) return null;
   const legacy = s.logoUrl?.trim() || null;
+  const ar = s.logoUrlAr?.trim() || null;
+  const nonAr = s.logoUrlNonAr?.trim() || null;
   if (locale === 'ar') {
-    return s.logoUrlAr?.trim() || legacy;
+    return ar || legacy;
   }
-  return s.logoUrlNonAr?.trim() || legacy;
+  return nonAr || legacy || ar;
 }
 
 /** حلّ الشعار للعرض حسب اللغة (يشمل معالجة localhost للشبكة المحلية) */

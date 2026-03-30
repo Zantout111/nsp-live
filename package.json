@@ -5,9 +5,10 @@
   "scripts": {
     "postinstall": "prisma generate",
     "dev": "next dev -H 0.0.0.0 -p 3000",
-    "build": "next build --webpack && cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/ && node scripts/copy-env-standalone.mjs && node scripts/copy-standalone-swc.mjs",
+    "build": "next build --webpack && cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/ && node scripts/link-standalone-uploads.mjs && node scripts/copy-env-standalone.mjs && node scripts/copy-standalone-swc.mjs && node scripts/copy-standalone-prisma-db.mjs",
     "start": "NODE_ENV=production bun .next/standalone/server.js 2>&1 | tee server.log",
     "start:node": "NODE_ENV=production node .next/standalone/server.js",
+    "start:full": "next start -H 0.0.0.0 -p 3000",
     "lint": "eslint .",
     "db:push": "prisma db push",
     "db:generate": "prisma generate",

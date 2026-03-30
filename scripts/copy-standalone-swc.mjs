@@ -1,4 +1,4 @@
-import { cpSync, existsSync, mkdirSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, rmSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 
 const root = process.cwd();
@@ -10,6 +10,12 @@ if (!existsSync(src)) {
   process.exit(0);
 }
 
+if (existsSync(dest)) {
+  rmSync(dest, { recursive: true, force: true });
+}
 mkdirSync(dirname(dest), { recursive: true });
-cpSync(src, dest, { recursive: true });
-console.log('[build] copied @swc/helpers → .next/standalone/node_modules/');
+cpSync(src, dest, {
+  recursive: true,
+  dereference: true,
+});
+console.log('[build] copied @swc/helpers → .next/standalone/node_modules/ (dereference symlinks)');

@@ -729,6 +729,7 @@ export default function Home() {
             >
               {/* eslint-disable-next-line @next/next/no-img-element — شاشة المقدمة؛ مسار افتراضي logo.svg */}
               <img
+                key={introLogoSrc}
                 src={introLogoSrc}
                 alt=""
                 width={240}
@@ -783,6 +784,7 @@ export default function Home() {
           <div className="flex min-w-0 items-center gap-2">
             {/* eslint-disable-next-line @next/next/no-img-element — شعار الترويسة بدون إطار/قص دائري */}
             <img
+              key={getLogoUrl()}
               src={getLogoUrl()}
               alt=""
               width={240}
@@ -1640,6 +1642,7 @@ export default function Home() {
           </div>
           <div className="mt-10 flex flex-col items-center gap-2 border-t border-border/60 pt-8 text-center dark:border-white/10">
             <Image
+              key={getLogoUrl()}
               src={getLogoUrl()}
               alt=""
               width={120}

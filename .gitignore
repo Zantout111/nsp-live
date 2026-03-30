@@ -24,6 +24,9 @@ node_modules
 public/uploads/*
 !public/uploads/.gitkeep
 
+# إنتاج: شعارات ومرفقات خارج .next (انظر resolvePublicUploadsDir)
+/uploads/
+
 # sqlite (local dev DB — do not commit)
 prisma/db/*.db
 prisma/db/*.db-journal

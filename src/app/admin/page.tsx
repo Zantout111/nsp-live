@@ -2055,8 +2055,8 @@ export default function AdminPage() {
                   </div>
                   <p className="text-xs text-muted-foreground">
                     {locale === 'ar'
-                      ? 'شعار منفصل للعربية، وشعار لباقي اللغات (إنجليزي، سويدي، ألماني، فرنسي…). إن تُرك أحدهما فارغاً يُستخدم الحقل القديم «شعار موحّد» إن وُجد.'
-                      : 'Separate logos for Arabic vs all other locales. If one is empty, the legacy unified logo is used as fallback.'}
+                      ? 'شعار للعربية وشعار لباقي اللغات. إن تُرك «باقي اللغات» فارغاً يُعرض شعار العربية ثم «شعار موحّد» القديم إن وُجد — حتى لا يبقى الموقع على الشعار الافتراضي.'
+                      : 'Arabic vs other locales. If non-Arabic logo is empty, the Arabic logo is shown, then the legacy unified field — so English etc. are not stuck on the default SVG unless you clear all.'}
                   </p>
 
                   <div className="grid gap-4 md:grid-cols-2">
@@ -2199,6 +2199,7 @@ export default function AdminPage() {
                             <div className="text-center">
                               <p className="mb-0.5 text-[10px] text-muted-foreground">AR</p>
                               <img
+                                key={`prev-ar-${slot}-${siteIdentity.logoUrlAr || siteIdentity.logoUrl || ''}`}
                                 src={resolveLogoUrlForClient(
                                   siteIdentity.logoUrlAr || siteIdentity.logoUrl
                                 )}
@@ -2315,6 +2316,7 @@ export default function AdminPage() {
                       <div className="flex items-center gap-2">
                         <span className="text-[10px] text-muted-foreground">AR</span>
                         <img
+                          key={`hdr-ar-${siteIdentity.logoUrlAr || siteIdentity.logoUrl || ''}`}
                           src={resolveLogoUrlForClient(
                             siteIdentity.logoUrlAr || siteIdentity.logoUrl
                           )}
@@ -2331,6 +2333,7 @@ export default function AdminPage() {
                           {locale === 'ar' ? 'غير عربي' : 'Non-AR'}
                         </span>
                         <img
+                          key={`hdr-non-${siteIdentity.logoUrlNonAr || siteIdentity.logoUrl || ''}`}
                           src={resolveLogoUrlForClient(
                             siteIdentity.logoUrlNonAr || siteIdentity.logoUrl
                           )}

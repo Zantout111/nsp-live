@@ -2,24 +2,30 @@ import { existsSync } from 'fs';
 import path from 'path';
 
 /**
- * مجلد رفع الملفات تحت public/uploads (متوافق مع وضع standalone).
+ * جذر المشروع في الإنتاج: عند تشغيل standalone من `.next/standalone` يكون cwd هناك،
+ * و`npm run build` يحذف ذلك المجلد بالكامل فيُفقد `public/uploads` (الشعار والمرفقات).
+ * لذلك نخزّن الرفع تحت `<جذر_المشروع>/uploads` ونخدمها عبر `app/uploads/[[...path]]/route.ts`.
+ */
+function resolveProductionProjectRoot(): string {
+  const cwd = process.cwd();
+  if (existsSync(path.join(cwd, 'server.js'))) {
+    return path.resolve(cwd, '..', '..');
+  }
+  return cwd;
+}
+
+/**
+ * مجلد رفع الملفات. التطوير: `public/uploads`. الإنتاج: مجلد `uploads` بجانب المشروع
+ * أو المسار في `UPLOADS_DIR` (مسار مطلق).
  */
 export function resolvePublicUploadsDir(): string {
   const cwd = process.cwd();
-  // `next dev` يخدم الملفات الثابتة من `public/` فقط. بعد `next build` يبقى مجلد
-  // `.next/standalone` على القرص؛ لو كتبنا الإيصالات هناك فلن تُجد عند /uploads/... في التطوير.
+  const fromEnv = process.env.UPLOADS_DIR?.trim();
+  if (fromEnv) {
+    return path.resolve(fromEnv);
+  }
   if (process.env.NODE_ENV === 'development') {
     return path.join(cwd, 'public', 'uploads');
   }
-  const standalonePublic = path.join(cwd, '.next', 'standalone', 'public');
-  if (
-    existsSync(path.join(cwd, '.next', 'standalone', 'server.js')) &&
-    existsSync(standalonePublic)
-  ) {
-    return path.join(standalonePublic, 'uploads');
-  }
-  if (existsSync(path.join(cwd, 'server.js'))) {
-    return path.join(cwd, 'public', 'uploads');
-  }
-  return path.join(cwd, 'public', 'uploads');
+  return path.join(resolveProductionProjectRoot(), 'uploads');
 }
