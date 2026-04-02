@@ -1,108 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { executeSpTodaySync } from '@/lib/sp-today-sync';
-import {
-  ensureSyncCategoriesComplete,
-  mergeSyncConfig,
-  SYNC_CATEGORY_IDS,
-  type SyncCategoryId,
-} from '@/lib/sync-config';
-
-function legacyFromRow(s: {
-  updateInterval: number;
-  adjustmentAmount: number;
-  adjustmentType: string;
-}) {
-  return {
-    updateIntervalHours: s.updateInterval ?? 6,
-    adjustmentAmount: s.adjustmentAmount ?? 250,
-    adjustmentType: (s.adjustmentType === 'addition' ? 'addition' : 'deduction') as 'deduction' | 'addition',
-  };
-}
-
-function minutesSince(iso?: string): number {
-  if (!iso) return Infinity;
-  const t = new Date(iso).getTime();
-  if (Number.isNaN(t)) return Infinity;
-  return (Date.now() - t) / 60000;
-}
-
-function dueCategories(force: boolean, merged: ReturnType<typeof mergeSyncConfig>): SyncCategoryId[] {
-  if (force) {
-    return SYNC_CATEGORY_IDS.filter((id) => merged.categories[id]?.enabled !== false);
-  }
-  const out: SyncCategoryId[] = [];
-  for (const id of SYNC_CATEGORY_IDS) {
-    const c = merged.categories[id];
-    if (!c || c.enabled === false) continue;
-    const last = merged.lastFetchedAt[id];
-    const mins = typeof c.intervalMinutes === 'number' && c.intervalMinutes >= 1 ? c.intervalMinutes : 60;
-    if (minutesSince(last) >= mins) {
-      out.push(id);
-    }
-  }
-  return out;
-}
-
-async function runDueSync(force: boolean) {
-  const settings = await db.siteSettings.findFirst();
-  const leg = legacyFromRow(settings ?? { updateInterval: 6, adjustmentAmount: 250, adjustmentType: 'deduction' });
-  const merged = ensureSyncCategoriesComplete(mergeSyncConfig(settings?.syncConfig, leg), leg);
-
-  if (!settings?.autoUpdateEnabled && !force) {
-    return {
-      skipped: true as const,
-      message: 'Auto-update is disabled',
-      merged,
-      settings,
-    };
-  }
-
-  const toRun = dueCategories(force, merged);
-  if (toRun.length === 0) {
-    return {
-      skipped: true as const,
-      message: force ? 'No enabled categories' : 'No category reached its interval yet',
-      merged,
-      settings,
-    };
-  }
-
-  const { results, config: nextConfig } = await executeSpTodaySync({
-    db,
-    config: merged,
-    categories: toRun,
-  });
-
-  const anyOk = Object.values(results).some((r) => r?.ok);
-  if (settings) {
-    await db.siteSettings.update({
-      where: { id: settings.id },
-      data: {
-        syncConfig: nextConfig as object,
-        lastUpdate: new Date(),
-        ...(anyOk ? { lastFetchTime: new Date() } : {}),
-      },
-    });
-  } else if (anyOk) {
-    await db.siteSettings.create({
-      data: {
-        siteName: 'سعر الليرة السورية',
-        syncConfig: nextConfig as object,
-        lastFetchTime: new Date(),
-        lastUpdate: new Date(),
-      },
-    });
-  }
-
-  return {
-    skipped: false as const,
-    results,
-    nextConfig,
-    categories: toRun,
-    anyOk,
-  };
-}
+import { runDueSyncCron } from '@/lib/run-due-sync-cron';
 
 // GET — استدعاء من جدولة خارجية مع ?secret=
 export async function GET(request: Request) {
@@ -119,7 +17,7 @@ export async function GET(request: Request) {
       );
     }
 
-    const out = await runDueSync(force);
+    const out = await runDueSyncCron(force);
 
     if (out.skipped) {
       return NextResponse.json({
@@ -157,7 +55,7 @@ export async function POST(request: Request) {
     if (!settings?.autoUpdateEnabled) {
       return NextResponse.json({ success: false, message: 'Auto-update is disabled' });
     }
-    const out = await runDueSync(true);
+    const out = await runDueSyncCron(true);
     if (out.skipped) {
       return NextResponse.json({ success: false, message: out.message });
     }

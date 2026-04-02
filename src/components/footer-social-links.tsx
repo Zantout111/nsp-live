@@ -8,6 +8,7 @@ export type FooterSocialUrls = {
   telegram: string | null | undefined;
   instagram: string | null | undefined;
   youtube: string | null | undefined;
+  tiktok: string | null | undefined;
 };
 
 function IconFb({ className }: { className?: string }) {
@@ -50,6 +51,14 @@ function IconYt({ className }: { className?: string }) {
   );
 }
 
+function IconTiktok({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43v-7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.1z" />
+    </svg>
+  );
+}
+
 const btnClass =
   'inline-flex h-10 w-10 items-center justify-center rounded-full border border-border/80 bg-background/60 text-foreground/80 shadow-sm transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-foreground dark:border-white/15 dark:bg-white/5 dark:text-slate-300 dark:hover:border-primary/50 dark:hover:bg-primary/15 dark:hover:text-white';
 
@@ -59,7 +68,8 @@ export function footerSocialHasAny(urls: FooterSocialUrls): boolean {
       urls.x?.trim() ||
       urls.telegram?.trim() ||
       urls.instagram?.trim() ||
-      urls.youtube?.trim()
+      urls.youtube?.trim() ||
+      urls.tiktok?.trim()
   );
 }
 
@@ -70,6 +80,7 @@ export function FooterSocialLinks({
   labelTelegram,
   labelInstagram,
   labelYoutube,
+  labelTiktok,
 }: {
   urls: FooterSocialUrls;
   labelFacebook: string;
@@ -77,6 +88,7 @@ export function FooterSocialLinks({
   labelTelegram: string;
   labelInstagram: string;
   labelYoutube: string;
+  labelTiktok: string;
 }) {
   const items: { href: string; label: string; Icon: typeof IconFb }[] = [];
   if (urls.facebook?.trim()) items.push({ href: urls.facebook.trim(), label: labelFacebook, Icon: IconFb });
@@ -84,6 +96,7 @@ export function FooterSocialLinks({
   if (urls.telegram?.trim()) items.push({ href: urls.telegram.trim(), label: labelTelegram, Icon: IconTg });
   if (urls.instagram?.trim()) items.push({ href: urls.instagram.trim(), label: labelInstagram, Icon: IconIg });
   if (urls.youtube?.trim()) items.push({ href: urls.youtube.trim(), label: labelYoutube, Icon: IconYt });
+  if (urls.tiktok?.trim()) items.push({ href: urls.tiktok.trim(), label: labelTiktok, Icon: IconTiktok });
 
   if (items.length === 0) return null;
 

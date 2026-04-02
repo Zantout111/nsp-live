@@ -4,6 +4,21 @@ import { db, ensureSqliteSchema } from '@/lib/db';
 import { mergeSyncConfig, mirrorLegacyFromCurrencies, SYNC_CATEGORY_IDS, type SyncConfigV1 } from '@/lib/sync-config';
 import { DEFAULT_LOGO_SIZES, parseLogoSizes, type LogoSizes } from '@/lib/logo-sizes';
 import { normalizeSocialUrl } from '@/lib/social-url';
+import { readFooterSocialTiktok, writeFooterSocialTiktok } from '@/lib/footer-social-tiktok';
+import { patchFuelVisibilityMap, readFuelVisibilityMap } from '@/lib/fuel-visibility-db';
+import {
+  patchCryptoRealtimeSettings,
+  patchForexFinnhubSettings,
+  readCryptoRealtimePublic,
+  readForexFinnhubPublic,
+} from '@/lib/forex-finnhub-db';
+import type { FinnhubForexSymbolRow } from '@/lib/finnhub-types';
+import {
+  normalizeCaPub,
+  sanitizeAdSlot,
+  sanitizeAdsTxtRaw,
+  sanitizeSiteVerification,
+} from '@/lib/adsense-config';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,6 +39,11 @@ export async function GET() {
   try {
     await ensureSqliteSchema();
     const settings = await db.siteSettings.findFirst();
+    const tiktok =
+      settings?.id != null ? await readFooterSocialTiktok(db, settings.id) : null;
+    const fuelVisibilityMap = await readFuelVisibilityMap(settings?.id);
+    const finnhub = await readForexFinnhubPublic();
+    const cryptoLive = await readCryptoRealtimePublic();
     const syncConfig = mergeSyncConfig(
       settings?.syncConfig,
       legacyFromRow(settings ?? { updateInterval: 6, adjustmentAmount: 250, adjustmentType: 'deduction' })
@@ -70,6 +90,19 @@ export async function GET() {
         footerSocialTelegram: settings?.footerSocialTelegram ?? null,
         footerSocialInstagram: settings?.footerSocialInstagram ?? null,
         footerSocialYoutube: settings?.footerSocialYoutube ?? null,
+        footerSocialTiktok: tiktok,
+        fuelVisibilityMap,
+        forexRealtimeEnabled: finnhub.forexRealtimeEnabled,
+        finnhubApiKeySet: finnhub.finnhubApiKeySet,
+        finnhubForexSymbolRows: finnhub.finnhubForexSymbolRows,
+        cryptoRealtimeEnabled: cryptoLive.cryptoRealtimeEnabled,
+        cryptoRealtimeCodes: cryptoLive.cryptoRealtimeCodes,
+        adsenseEnabled: settings?.adsenseEnabled ?? false,
+        adsensePublisherId: settings?.adsensePublisherId ?? null,
+        adsenseSiteVerification: settings?.adsenseSiteVerification ?? null,
+        adsTxtRaw: settings?.adsTxtRaw ?? null,
+        adsenseSlotHero: settings?.adsenseSlotHero ?? null,
+        adsenseSlotContent: settings?.adsenseSlotContent ?? null,
       },
     });
   } catch (error) {
@@ -125,7 +158,35 @@ export async function PUT(request: Request) {
       footerSocialTelegram,
       footerSocialInstagram,
       footerSocialYoutube,
-    } = body;
+      footerSocialTiktok,
+      fuelVisibilityMap,
+      forexRealtimeEnabled,
+      finnhubForexSymbolRows,
+      finnhubApiKey,
+      clearFinnhubApiKey,
+      cryptoRealtimeEnabled,
+      cryptoRealtimeCodes,
+      adsenseEnabled,
+      adsensePublisherId,
+      adsenseSiteVerification,
+      adsTxtRaw,
+      adsenseSlotHero,
+      adsenseSlotContent,
+    } = body as Record<string, unknown> & {
+      forexRealtimeEnabled?: boolean;
+      finnhubForexSymbolRows?: FinnhubForexSymbolRow[];
+      finnhubApiKey?: string;
+      clearFinnhubApiKey?: boolean;
+      cryptoRealtimeEnabled?: boolean;
+      cryptoRealtimeCodes?: string[];
+      fuelVisibilityMap?: Record<string, boolean>;
+      adsenseEnabled?: boolean;
+      adsensePublisherId?: string | null;
+      adsenseSiteVerification?: string | null;
+      adsTxtRaw?: string | null;
+      adsenseSlotHero?: string | null;
+      adsenseSlotContent?: string | null;
+    };
 
     const settings = await db.siteSettings.findFirst();
 
@@ -284,11 +345,44 @@ export async function PUT(request: Request) {
       updateData.adjustmentType = mirror.adjustmentType;
     }
 
+    if (typeof adsenseEnabled === 'boolean') {
+      updateData.adsenseEnabled = adsenseEnabled;
+    }
+    if (adsensePublisherId !== undefined) {
+      if (adsensePublisherId === null || String(adsensePublisherId).trim() === '') {
+        updateData.adsensePublisherId = null;
+      } else {
+        updateData.adsensePublisherId = normalizeCaPub(String(adsensePublisherId));
+      }
+    }
+    if (adsenseSiteVerification !== undefined) {
+      updateData.adsenseSiteVerification = sanitizeSiteVerification(
+        adsenseSiteVerification === null ? null : String(adsenseSiteVerification)
+      );
+    }
+    if (adsTxtRaw !== undefined) {
+      updateData.adsTxtRaw = sanitizeAdsTxtRaw(adsTxtRaw === null ? null : String(adsTxtRaw));
+    }
+    if (adsenseSlotHero !== undefined) {
+      const t = adsenseSlotHero === null ? '' : String(adsenseSlotHero).trim();
+      updateData.adsenseSlotHero = t === '' ? null : sanitizeAdSlot(t);
+    }
+    if (adsenseSlotContent !== undefined) {
+      const t = adsenseSlotContent === null ? '' : String(adsenseSlotContent).trim();
+      updateData.adsenseSlotContent = t === '' ? null : sanitizeAdSlot(t);
+    }
+
+    let savedSettingsId: string;
+
     if (settings) {
       await db.siteSettings.update({
         where: { id: settings.id },
         data: updateData,
       });
+      savedSettingsId = settings.id;
+      if (footerSocialTiktok !== undefined) {
+        await writeFooterSocialTiktok(db, settings.id, footerSocialTiktok);
+      }
     } else {
       const createLogoSizes: Prisma.InputJsonValue =
         logoSizesJson ??
@@ -297,7 +391,7 @@ export async function PUT(request: Request) {
           footer: DEFAULT_LOGO_SIZES.footer,
           loading: DEFAULT_LOGO_SIZES.loading,
         } as const);
-      await db.siteSettings.create({
+      const created = await db.siteSettings.create({
         data: {
           siteName: siteName != null ? String(siteName) : 'سعر الليرة السورية',
           siteNameAr: siteNameAr != null ? String(siteNameAr) : 'سعر الليرة السورية',
@@ -346,8 +440,96 @@ export async function PUT(request: Request) {
             platformApiSubscriptionDays <= 3650
               ? Math.round(platformApiSubscriptionDays)
               : 365,
+          ...(typeof adsenseEnabled === 'boolean' ? { adsenseEnabled } : {}),
+          ...(adsensePublisherId !== undefined
+            ? {
+                adsensePublisherId:
+                  adsensePublisherId === null || String(adsensePublisherId).trim() === ''
+                    ? null
+                    : normalizeCaPub(String(adsensePublisherId)),
+              }
+            : {}),
+          ...(adsenseSiteVerification !== undefined
+            ? {
+                adsenseSiteVerification: sanitizeSiteVerification(
+                  adsenseSiteVerification === null ? null : String(adsenseSiteVerification)
+                ),
+              }
+            : {}),
+          ...(adsTxtRaw !== undefined
+            ? { adsTxtRaw: sanitizeAdsTxtRaw(adsTxtRaw === null ? null : String(adsTxtRaw)) }
+            : {}),
+          ...(adsenseSlotHero !== undefined
+            ? {
+                adsenseSlotHero:
+                  adsenseSlotHero === null || String(adsenseSlotHero).trim() === ''
+                    ? null
+                    : sanitizeAdSlot(String(adsenseSlotHero).trim()),
+              }
+            : {}),
+          ...(adsenseSlotContent !== undefined
+            ? {
+                adsenseSlotContent:
+                  adsenseSlotContent === null || String(adsenseSlotContent).trim() === ''
+                    ? null
+                    : sanitizeAdSlot(String(adsenseSlotContent).trim()),
+              }
+            : {}),
         },
       });
+      if (footerSocialTiktok !== undefined) {
+        await writeFooterSocialTiktok(db, created.id, footerSocialTiktok);
+      }
+      savedSettingsId = created.id;
+    }
+
+    const wantsFinnhubPatch =
+      typeof forexRealtimeEnabled === 'boolean' ||
+      Array.isArray(finnhubForexSymbolRows) ||
+      (typeof finnhubApiKey === 'string' && finnhubApiKey.trim().length > 0) ||
+      clearFinnhubApiKey === true;
+
+    if (wantsFinnhubPatch) {
+      const rows: FinnhubForexSymbolRow[] | undefined = Array.isArray(finnhubForexSymbolRows)
+        ? finnhubForexSymbolRows.map((x) => ({
+            finnhubSymbol: String((x as FinnhubForexSymbolRow).finnhubSymbol ?? '').trim(),
+            pair: String((x as FinnhubForexSymbolRow).pair ?? '').trim(),
+          }))
+        : undefined;
+      await patchForexFinnhubSettings(savedSettingsId, {
+        ...(typeof forexRealtimeEnabled === 'boolean' ? { forexRealtimeEnabled } : {}),
+        ...(rows ? { finnhubForexSymbolRows: rows } : {}),
+        ...(typeof finnhubApiKey === 'string' && finnhubApiKey.trim().length > 0
+          ? { finnhubApiKey: finnhubApiKey.trim() }
+          : {}),
+        ...(clearFinnhubApiKey === true ? { clearFinnhubApiKey: true } : {}),
+      });
+    }
+
+    const wantsCryptoPatch =
+      typeof cryptoRealtimeEnabled === 'boolean' || Array.isArray(cryptoRealtimeCodes);
+    if (wantsCryptoPatch) {
+      await patchCryptoRealtimeSettings(savedSettingsId, {
+        ...(typeof cryptoRealtimeEnabled === 'boolean' ? { cryptoRealtimeEnabled } : {}),
+        ...(Array.isArray(cryptoRealtimeCodes) ? { cryptoRealtimeCodes } : {}),
+      });
+    }
+
+    if (
+      fuelVisibilityMap != null &&
+      typeof fuelVisibilityMap === 'object' &&
+      !Array.isArray(fuelVisibilityMap)
+    ) {
+      await patchFuelVisibilityMap(savedSettingsId, fuelVisibilityMap);
+    }
+
+    try {
+      const { restartFinnhubBridge } = await import('@/lib/finnhub-forex-hub');
+      await restartFinnhubBridge();
+      const { restartCryptoBridge } = await import('@/lib/crypto-live-hub');
+      await restartCryptoBridge();
+    } catch (e) {
+      console.warn('[settings] restartRealtimeBridges:', e);
     }
 
     return NextResponse.json({

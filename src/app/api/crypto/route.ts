@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, ensureSqliteSchema } from '@/lib/db';
+import { readCryptoRealtimePublic } from '@/lib/forex-finnhub-db';
+import { getCryptoLiveSnapshot } from '@/lib/crypto-live-hub';
+import { fetchCoinGeckoForCodes } from '@/lib/free-market-rates';
 import { ensureForexCryptoSeeded } from '@/lib/seed-forex-crypto';
 
 // Default crypto rates to initialize
@@ -15,17 +18,54 @@ const defaultCryptoRates = [
 
 export async function GET() {
   try {
+    await ensureSqliteSchema();
     await ensureForexCryptoSeeded();
     const cryptoRates = await db.$queryRaw<any[]>`SELECT * FROM CryptoRate ORDER BY code ASC`;
+    const cfg = await readCryptoRealtimePublic();
+    const live = getCryptoLiveSnapshot();
+    const enabled = cfg.cryptoRealtimeEnabled && cfg.cryptoRealtimeCodes.length > 0;
+    const missingCodes: string[] = [];
+    const merged = cryptoRates.map((row) => {
+      const code = String((row as { code: string }).code).toUpperCase();
+      const u = live[code];
+      if (!enabled) return row;
+      if (!u) {
+        if (cfg.cryptoRealtimeCodes.includes(code)) missingCodes.push(code);
+        return row;
+      }
+      return {
+        ...row,
+        price: u.price,
+        change: u.change,
+        lastUpdated: new Date(u.updatedAt).toISOString(),
+      };
+    });
+    if (enabled && missingCodes.length > 0) {
+      const m = await fetchCoinGeckoForCodes(missingCodes);
+      for (const row of merged) {
+        const code = String((row as { code: string }).code).toUpperCase();
+        const u = m.get(code);
+        if (!u) continue;
+        (row as { price: number; change: number; lastUpdated: string }).price = u.price;
+        (row as { price: number; change: number; lastUpdated: string }).change = u.change;
+        (row as { price: number; change: number; lastUpdated: string }).lastUpdated = new Date().toISOString();
+      }
+    }
     return NextResponse.json({
       success: true,
-      data: cryptoRates
+      data: merged,
+      realtime: {
+        enabled,
+        streamPath: '/api/crypto/stream',
+        codes: enabled ? cfg.cryptoRealtimeCodes : [],
+      },
     });
   } catch (error) {
     console.error('Error fetching crypto rates:', error);
     return NextResponse.json({
       success: true,
-      data: defaultCryptoRates
+      data: defaultCryptoRates,
+      realtime: { enabled: false, streamPath: '/api/crypto/stream' },
     });
   }
 }

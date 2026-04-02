@@ -39,8 +39,9 @@ export function defaultSyncConfigV1(legacy: {
       currencies: cat(true, m, 'fixed', legacy.adjustmentAmount, legacy.adjustmentType),
       gold: cat(true, m, 'percent', 0, 'deduction'),
       fuel: cat(true, m, 'fixed', 0, 'deduction'),
-      crypto: cat(true, m, 'percent', 0, 'deduction'),
-      forex: cat(true, m, 'percent', 0, 'deduction'),
+      /** لا تُفعّل تلقائياً — التحديث من لوحة التحكم فقط */
+      crypto: cat(false, m, 'percent', 0, 'deduction'),
+      forex: cat(false, m, 'percent', 0, 'deduction'),
     },
     lastFetchedAt: {},
   };

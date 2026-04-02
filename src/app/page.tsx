@@ -23,6 +23,7 @@ import {
   Globe,
   Medal,
   Bitcoin,
+  Zap,
 } from 'lucide-react';
 import { numberingLatn } from '@/lib/intl-latn';
 import { DEFAULT_LOGO_SIZES, parseLogoSizes, type LogoSizes } from '@/lib/logo-sizes';
@@ -32,6 +33,7 @@ import { FooterSocialLinks, footerSocialHasAny } from '@/components/footer-socia
 import { AdvancedExchangeCalculator } from '@/components/advanced-exchange-calculator';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
+import { AdSenseSlot } from '@/components/adsense-slot';
 
 interface CurrencyRate {
   id: string;
@@ -118,6 +120,12 @@ interface SiteSettings {
   footerSocialTelegram?: string | null;
   footerSocialInstagram?: string | null;
   footerSocialYoutube?: string | null;
+  footerSocialTiktok?: string | null;
+  adsenseEnabled?: boolean;
+  /** ca-pub-… جاهز لوحدات العرض */
+  adsenseAdClient?: string | null;
+  adsenseSlotHero?: string | null;
+  adsenseSlotContent?: string | null;
 }
 
 interface RatesData {
@@ -150,6 +158,148 @@ const flagUrls: Record<string, string> = {
   BHD: 'https://flagcdn.com/w80/bh.png',
   OMR: 'https://flagcdn.com/w80/om.png',
 };
+
+const CRYPTO_BRAND_CARD_CLASS: Record<string, string> = {
+  BTC: 'border-amber-500/30 bg-amber-500/10',
+  ETH: 'border-indigo-500/30 bg-indigo-500/10',
+  BNB: 'border-yellow-500/30 bg-yellow-500/10',
+  XRP: 'border-slate-500/30 bg-slate-500/10',
+  SOL: 'border-purple-500/30 bg-purple-500/10',
+  ADA: 'border-blue-500/30 bg-blue-500/10',
+  DOGE: 'border-orange-500/30 bg-orange-500/10',
+  USDT: 'border-emerald-500/30 bg-emerald-500/10',
+  USDC: 'border-sky-500/30 bg-sky-500/10',
+  TRX: 'border-red-500/30 bg-red-500/10',
+};
+
+const FOREX_PAIR_CARD_CLASS: Record<string, string> = {
+  'EUR/USD': 'border-sky-500/25 bg-sky-500/10',
+  'GBP/USD': 'border-indigo-500/25 bg-indigo-500/10',
+  'USD/JPY': 'border-rose-500/25 bg-rose-500/10',
+  'USD/CHF': 'border-red-500/25 bg-red-500/10',
+  'AUD/USD': 'border-emerald-500/25 bg-emerald-500/10',
+  'USD/CAD': 'border-orange-500/25 bg-orange-500/10',
+  'EUR/GBP': 'border-violet-500/25 bg-violet-500/10',
+  'EUR/JPY': 'border-fuchsia-500/25 bg-fuchsia-500/10',
+  'XAU/USD': 'border-yellow-500/25 bg-yellow-500/10',
+  'OIL/USD': 'border-zinc-500/25 bg-zinc-500/10',
+  'GAS/USD': 'border-cyan-500/25 bg-cyan-500/10',
+  'SUGAR/USD': 'border-pink-500/25 bg-pink-500/10',
+  'RICE/USD': 'border-emerald-500/25 bg-emerald-500/10',
+};
+
+const MARKET_ASSET_EMOJI: Record<string, string> = {
+  'asset-gold': '🥇',
+  'asset-oil': '🛢️',
+  'asset-gas': '🔥',
+  'asset-sugar': '🍬',
+  'asset-rice': '🌾',
+};
+
+/** شعار تبويب الذهب وبطاقة الهيرو (ملف محلي) */
+const GOLD_HEADER_LOGO_PNG = '/sicon/gold.png';
+
+/**
+ * أيقونات PNG ثلاثية الأبعاد (Icons8 — يرجى الإشارة إلى icons8.com في صفحة الاعتمادات إن لزم).
+ * سبيكة، بنك/نقد، عملات، مجوهرات، ميزان غرام، كيس نقود.
+ */
+const ICONS8_3D = (name: string) => `https://img.icons8.com/3d-fluency/144/${name}.png`;
+const GOLD_TAB_CARD_IMAGES: string[] = [
+  ICONS8_3D('gold-bars'),
+  ICONS8_3D('bank'),
+  ICONS8_3D('coins'),
+  ICONS8_3D('medal'),
+  ICONS8_3D('scales'),
+  ICONS8_3D('money-bag'),
+];
+
+const MARKET_ESTIMATED_SIZE_UNIT: Record<
+  string,
+  { ar: string; en: string }
+> = {
+  'XAU/USD': { ar: 'أونصة', en: 'oz' },
+  'OIL/USD': { ar: 'برميل', en: 'barrel' },
+  'GAS/USD': { ar: 'م.و.ح', en: 'MMBtu' },
+  'SUGAR/USD': { ar: '≈ 0.454 كغ', en: '≈ 0.454 kg' },
+  'RICE/USD': { ar: '≈ 45.36 كغ', en: '≈ 45.36 kg' },
+};
+
+const MARKET_UNIT_KG_BY_PAIR: Partial<Record<string, number>> = {
+  'SUGAR/USD': 0.45359237, // lb -> kg
+  'RICE/USD': 45.359237, // cwt -> kg
+};
+
+function marketUsdPerKg(pair: string, rate: number): number | null {
+  const kg = MARKET_UNIT_KG_BY_PAIR[pair];
+  if (!kg || !Number.isFinite(rate) || rate <= 0) return null;
+  const v = rate / kg;
+  return Number.isFinite(v) && v > 0 ? v : null;
+}
+
+function parseMarketPair(pair: string): [string, string] | null {
+  const parts = String(pair || '')
+    .trim()
+    .toUpperCase()
+    .split('/')
+    .map((x) => x.trim());
+  if (parts.length !== 2 || !parts[0] || !parts[1]) return null;
+  return [parts[0], parts[1]];
+}
+
+function usdPerCurrencyFromForexRows(rows: ForexRateData[]): Map<string, number> {
+  const out = new Map<string, number>();
+  out.set('USD', 1);
+  for (const r of rows) {
+    const pair = parseMarketPair(r.pair);
+    const rate = Number(r.rate);
+    if (!pair || !Number.isFinite(rate) || rate <= 0) continue;
+    const [base, quote] = pair;
+    if (quote === 'USD') out.set(base, rate);
+    else if (base === 'USD') out.set(quote, 1 / rate);
+  }
+  return out;
+}
+
+function marketApproxSyp(
+  pair: string,
+  rate: number,
+  usdBuySyp: number | null | undefined,
+  allRows: ForexRateData[]
+): number | null {
+  if (!usdBuySyp || !Number.isFinite(usdBuySyp) || usdBuySyp <= 0) return null;
+  const parsed = parseMarketPair(pair);
+  if (!parsed || !Number.isFinite(rate) || rate <= 0) return null;
+  const [base, quote] = parsed;
+  if (quote === 'USD') return rate * usdBuySyp;
+  if (base === 'USD') return (1 / rate) * usdBuySyp;
+  const usdMap = usdPerCurrencyFromForexRows(allRows);
+  const quoteUsd = usdMap.get(quote);
+  if (quoteUsd && Number.isFinite(quoteUsd) && quoteUsd > 0) return quoteUsd * usdBuySyp;
+  return null;
+}
+
+function MarketBadge({ code }: { code: string }) {
+  const c = String(code || '').toLowerCase();
+  const emoji = MARKET_ASSET_EMOJI[c];
+  if (emoji) {
+    return (
+      <span className="inline-flex h-3.5 w-5 items-center justify-center rounded-sm border border-background bg-background/60 text-[10px] shadow-sm">
+        {emoji}
+      </span>
+    );
+  }
+  return (
+    <img
+      src={`https://flagcdn.com/w40/${c}.png`}
+      alt={c}
+      className="h-3.5 w-5 rounded-sm border border-background object-cover shadow-sm"
+    />
+  );
+}
+
+function cryptoPngUrl(code: string): string {
+  return `https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons@master/128/color/${code.toLowerCase()}.png`;
+}
 
 function rateDeltaAvg(
   a: number | null | undefined,
@@ -226,6 +376,13 @@ export default function Home() {
   });
   const [isNewLira, setIsNewLira] = useState(false);
   const [activeTab, setActiveTab] = useState('currencies');
+  /** بث فوركس لحظي من الخادم (Finnhub → SSE) */
+  const [forexRealtime, setForexRealtime] = useState(false);
+  const [forexLiveConnected, setForexLiveConnected] = useState(false);
+  const [cryptoRealtime, setCryptoRealtime] = useState(false);
+  const [forexFlashByPair, setForexFlashByPair] = useState<Record<string, 'up' | 'down'>>({});
+  const [cryptoFlashByCode, setCryptoFlashByCode] = useState<Record<string, 'up' | 'down'>>({});
+  const [brokenCryptoIconByCode, setBrokenCryptoIconByCode] = useState<Record<string, true>>({});
   const { toast } = useToast();
   const t = useTranslations();
   const locale = useLocale();
@@ -262,8 +419,17 @@ export default function Home() {
 
       const settingsJson = settingsRaw as { success?: boolean; settings?: SiteSettings } | null;
       const ratesJson = ratesRaw as { success?: boolean; data?: RatesData } | null;
-      const forexJson = forexRaw as { success?: boolean; data?: ForexRateData[] } | null;
+      const forexJson = forexRaw as {
+        success?: boolean;
+        data?: ForexRateData[];
+        realtime?: { enabled?: boolean; streamPath?: string; pairs?: string[] };
+      } | null;
       const cryptoJson = cryptoRaw as { success?: boolean; data?: CryptoRateData[] } | null;
+      const cryptoMeta = cryptoRaw as {
+        success?: boolean;
+        data?: CryptoRateData[];
+        realtime?: { enabled?: boolean; streamPath?: string; codes?: string[] };
+      } | null;
 
       if (settingsJson?.success && settingsJson.settings) {
         bootFrom(settingsJson.settings);
@@ -280,6 +446,8 @@ export default function Home() {
           cryptoRates: cryptoJson?.success && Array.isArray(cryptoJson.data) ? cryptoJson.data : [],
         });
       }
+      setForexRealtime(!!(forexJson?.success && forexJson?.realtime?.enabled));
+      setCryptoRealtime(!!(cryptoMeta?.success && cryptoMeta?.realtime?.enabled));
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
@@ -292,9 +460,116 @@ export default function Home() {
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 30000);
+    const interval = setInterval(fetchData, 1000);
     return () => clearInterval(interval);
   }, [fetchData]);
+
+  useEffect(() => {
+    if (!forexRealtime || typeof window === 'undefined') {
+      setForexLiveConnected(false);
+      return;
+    }
+    const es = new EventSource(new URL('/api/forex/stream', window.location.origin).toString());
+    es.onopen = () => setForexLiveConnected(true);
+    es.onerror = () => setForexLiveConnected(false);
+    es.onmessage = (ev) => {
+      try {
+        const msg = JSON.parse(ev.data) as {
+          type?: string;
+          rates?: Record<string, { rate: number; change: number; updatedAt: number }>;
+          connected?: boolean;
+        };
+        if (msg.type !== 'hello' && msg.type !== 'tick') return;
+        if (typeof msg.connected === 'boolean') setForexLiveConnected(msg.connected);
+        const rates = msg.rates;
+        if (rates && typeof rates === 'object' && Object.keys(rates).length > 0) {
+          const flash: Record<string, 'up' | 'down'> = {};
+          setData((d) => {
+            if (!d) return d;
+            return {
+              ...d,
+              forexRates: d.forexRates.map((f) => {
+                const u = rates[f.pair];
+                if (!u) return f;
+                if (u.rate > f.rate) flash[f.pair] = 'up';
+                else if (u.rate < f.rate) flash[f.pair] = 'down';
+                return {
+                  ...f,
+                  rate: u.rate,
+                  change: u.change,
+                  lastUpdated: new Date(u.updatedAt).toISOString(),
+                };
+              }),
+            };
+          });
+          if (Object.keys(flash).length > 0) {
+            setForexFlashByPair((prev) => ({ ...prev, ...flash }));
+            window.setTimeout(() => {
+              setForexFlashByPair((prev) => {
+                const next = { ...prev };
+                for (const k of Object.keys(flash)) delete next[k];
+                return next;
+              });
+            }, 700);
+          }
+        }
+      } catch {
+        /* ignore */
+      }
+    };
+    return () => {
+      es.close();
+      setForexLiveConnected(false);
+    };
+  }, [forexRealtime]);
+
+  useEffect(() => {
+    if (!cryptoRealtime || typeof window === 'undefined') return;
+    const es = new EventSource(new URL('/api/crypto/stream', window.location.origin).toString());
+    es.onmessage = (ev) => {
+      try {
+        const msg = JSON.parse(ev.data) as {
+          type?: string;
+          rates?: Record<string, { price: number; change: number; updatedAt: number }>;
+        };
+        if (msg.type !== 'hello' && msg.type !== 'tick') return;
+        const rates = msg.rates;
+        if (!rates || typeof rates !== 'object' || Object.keys(rates).length === 0) return;
+        const flash: Record<string, 'up' | 'down'> = {};
+        setData((d) => {
+          if (!d) return d;
+          return {
+            ...d,
+            cryptoRates: d.cryptoRates.map((c) => {
+              const u = rates[c.code];
+              if (!u) return c;
+              if (u.price > c.price) flash[c.code] = 'up';
+              else if (u.price < c.price) flash[c.code] = 'down';
+              return {
+                ...c,
+                price: u.price,
+                change: u.change,
+                lastUpdated: new Date(u.updatedAt).toISOString(),
+              };
+            }),
+          };
+        });
+        if (Object.keys(flash).length > 0) {
+          setCryptoFlashByCode((prev) => ({ ...prev, ...flash }));
+          window.setTimeout(() => {
+            setCryptoFlashByCode((prev) => {
+              const next = { ...prev };
+              for (const k of Object.keys(flash)) delete next[k];
+              return next;
+            });
+          }, 700);
+        }
+      } catch {
+        /* ignore */
+      }
+    };
+    return () => es.close();
+  }, [cryptoRealtime]);
 
   /** إن علّق الجلب (شبكة/خادم)، لا نبقى على شاشة التحميل إلى ما لا نهاية */
   useEffect(() => {
@@ -479,6 +754,7 @@ export default function Home() {
     telegram: data?.siteSettings?.footerSocialTelegram ?? null,
     instagram: data?.siteSettings?.footerSocialInstagram ?? null,
     youtube: data?.siteSettings?.footerSocialYoutube ?? null,
+    tiktok: data?.siteSettings?.footerSocialTiktok ?? null,
   };
   const showFooterSocial = footerSocialHasAny(footerSocialUrls);
 
@@ -625,39 +901,32 @@ export default function Home() {
     </div>
   );
 
-  const heroGoldCardClassName =
-    'rounded-2xl border border-amber-300/70 bg-gradient-to-br from-amber-50/90 to-orange-50/45 p-3 shadow-md shadow-amber-900/[0.06] ring-1 ring-amber-200/50 backdrop-blur-sm transition-all duration-300 hover:-translate-y-0.5 hover:from-amber-50 hover:to-orange-50/60 hover:shadow-lg hover:shadow-amber-900/10 dark:border-amber-500/30 dark:from-amber-500/15 dark:to-transparent dark:ring-amber-500/20 dark:hover:from-amber-500/20 min-w-0';
-
   const renderHeroGoldCard = () => {
     if (!data?.goldPrice) return null;
     const gp = data.goldPrice;
     const sypOunce = usd ? gp.priceUsd * usd.buyRate : null;
     return (
-      <div className={heroGoldCardClassName}>
+      <div className={heroRateCardClassName}>
         <div className="mb-1.5 flex items-center justify-between gap-1.5">
-          <div className="flex min-w-0 flex-1 items-start gap-1.5">
-            {/* eslint-disable-next-line @next/next/no-img-element — أيقونة ثابتة من public/sicon */}
+          <div className="flex min-w-0 flex-1 items-center gap-1.5">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src="/sicon/gold.png"
+              src={GOLD_HEADER_LOGO_PNG}
               alt=""
               width={28}
               height={28}
-              className="h-7 w-7 shrink-0 rounded-sm object-contain"
+              className="h-6 w-6 shrink-0 rounded-sm object-contain sm:h-7 sm:w-7"
             />
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-1">
-                <p className="truncate font-semibold text-amber-950 dark:text-amber-50">
-                  {locale === 'ar' ? 'الذهب (أونصة)' : 'Gold (oz)'}
-                </p>
-                <RateDeltaBadge pct={gp.changeOuncePct} className="shrink-0" />
-              </div>
-            </div>
+            <span className="truncate font-medium" title="XAU">
+              {locale === 'ar' ? 'الذهب' : 'Gold'}
+            </span>
+            <RateDeltaBadge pct={gp.changeOuncePct} className="shrink-0" />
           </div>
           {shareBase && usd && (
             <PriceShareButton
               {...shareBase}
               size="icon"
-              className="h-7 w-7 shrink-0 border-amber-200/80 bg-white/50 dark:border-amber-500/30 dark:bg-white/10"
+              className="h-7 w-7 shrink-0 border-white/60 bg-white/50 dark:border-white/20 dark:bg-white/10"
               headline={locale === 'ar' ? 'الذهب — معاينة سريعة' : 'Gold — quick view'}
               subheadline="XAU / USD / SYP"
               rows={[
@@ -677,26 +946,24 @@ export default function Home() {
             />
           )}
         </div>
-        <div className="mt-0.5 border-t border-amber-200/60 pt-2 dark:border-amber-500/25">
-          <div className="grid min-w-0 grid-cols-2 gap-1.5">
-            <div>
-              <p
-                className={`text-[0.65rem] font-medium tracking-wide text-amber-900/85 dark:text-amber-200/75 ${locale === 'ar' ? '' : 'uppercase'}`}
-              >
-                {locale === 'ar' ? 'الدولار' : 'USD'}
-              </p>
-              <p className="text-lg font-bold tabular-nums leading-tight text-amber-950 dark:text-amber-50 sm:text-xl">
-                ${formatUsd(gp.priceUsd, 2)}
-              </p>
-            </div>
-            <div>
-              <p className="text-[0.65rem] font-medium uppercase tracking-wide text-amber-900/85 dark:text-amber-200/75">
-                {getCurrencySymbol()}
-              </p>
-              <p className="text-lg font-bold tabular-nums leading-tight text-amber-950 dark:text-amber-50 sm:text-xl">
-                {sypOunce != null ? formatNumber(sypOunce) : '---'}
-              </p>
-            </div>
+        <div className="mt-0.5 grid min-w-0 grid-cols-2 gap-1.5 border-t border-slate-900/[0.06] pt-2 text-center dark:border-white/10">
+          <div>
+            <p
+              className={`text-[0.65rem] font-medium tracking-wide text-muted-foreground dark:text-white/55 ${locale === 'ar' ? '' : 'uppercase'}`}
+            >
+              {locale === 'ar' ? 'الدولار' : 'USD'}
+            </p>
+            <p className="text-lg font-bold tabular-nums leading-tight sm:text-xl">
+              ${formatUsd(gp.priceUsd, 2)}
+            </p>
+          </div>
+          <div>
+            <p className="text-[0.65rem] font-medium uppercase tracking-wide text-muted-foreground dark:text-white/55">
+              {getCurrencySymbol()}
+            </p>
+            <p className="text-lg font-bold tabular-nums leading-tight sm:text-xl">
+              {sypOunce != null ? formatNumber(sypOunce) : '---'}
+            </p>
           </div>
         </div>
       </div>
@@ -925,6 +1192,20 @@ export default function Home() {
             </div>
           </div>
         </section>
+
+        {data.siteSettings.adsenseEnabled &&
+        data.siteSettings.adsenseAdClient &&
+        data.siteSettings.adsenseSlotHero ? (
+          <div className="relative z-10 mx-auto flex w-full max-w-7xl justify-center px-4 sm:px-6 lg:px-8">
+            <AdSenseSlot
+              client={data.siteSettings.adsenseAdClient}
+              slot={data.siteSettings.adsenseSlotHero}
+              labelAr="إعلان"
+              labelEn="Advertisement"
+              locale={locale}
+            />
+          </div>
+        ) : null}
 
         <section
           id="rates-panel"
@@ -1200,9 +1481,9 @@ export default function Home() {
               {data?.goldPrice && (
                 <div className="surface-card p-6">
                   <CardTitle className="mb-6 flex items-center gap-2 text-xl font-semibold text-foreground dark:text-slate-100">
-                    {/* eslint-disable-next-line @next/next/no-img-element — مطابقة بطاقة الهيرو: public/sicon/gold.png */}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
-                      src="/sicon/gold.png"
+                      src={GOLD_HEADER_LOGO_PNG}
                       alt=""
                       width={28}
                       height={28}
@@ -1215,51 +1496,60 @@ export default function Home() {
                       {
                         label: locale === 'ar' ? 'أونصة بالدولار' : 'Ounce in USD',
                         value: `$${formatUsd(data.goldPrice.priceUsd, 2)}`,
-                        color: 'amber',
+                        color: 'amber' as const,
                         deltaPct: data.goldPrice.changeOuncePct,
                       },
                       {
                         label: locale === 'ar' ? 'أونصة بالليرة' : 'Ounce in SYP',
                         value: getFeaturedCurrency('USD') ? formatNumber(data.goldPrice.priceUsd * getFeaturedCurrency('USD')!.buyRate) : '---',
                         suffix: getCurrencySymbol(),
-                        color: 'green',
+                        color: 'green' as const,
                         deltaPct: data.goldPrice.changeOuncePct,
                       },
                       {
                         label: locale === 'ar' ? 'ليرة ذهبية بالدولار' : 'Gold Lira in USD',
                         value: `$${formatUsd(data.goldPrice.pricePerGram * 8.5, 2)}`,
-                        color: 'amber',
+                        color: 'amber' as const,
                         deltaPct: data.goldPrice.changeGramPct,
                       },
                       {
                         label: locale === 'ar' ? 'ليرة ذهبية بالليرة' : 'Gold Lira in SYP',
                         value: getFeaturedCurrency('USD') ? formatNumber(data.goldPrice.pricePerGram * 8.5 * getFeaturedCurrency('USD')!.buyRate) : '---',
                         suffix: getCurrencySymbol(),
-                        color: 'green',
+                        color: 'green' as const,
                         deltaPct: data.goldPrice.changeGramPct,
                       },
                       {
                         label: locale === 'ar' ? 'غرام بالدولار' : 'Gram in USD',
                         value: `$${formatUsd(data.goldPrice.pricePerGram, 2)}`,
-                        color: 'amber',
+                        color: 'amber' as const,
                         deltaPct: data.goldPrice.changeGramPct,
                       },
                       {
                         label: locale === 'ar' ? 'غرام بالليرة' : 'Gram in SYP',
                         value: getFeaturedCurrency('USD') ? formatNumber(data.goldPrice.pricePerGram * getFeaturedCurrency('USD')!.buyRate) : '---',
                         suffix: getCurrencySymbol(),
-                        color: 'green',
+                        color: 'green' as const,
                         deltaPct: data.goldPrice.changeGramPct,
                       },
                     ].map((item, i) => {
+                      const cardImg = GOLD_TAB_CARD_IMAGES[i] ?? GOLD_TAB_CARD_IMAGES[0];
                       const displayVal = item.suffix ? `${item.value} ${item.suffix}` : String(item.value);
+                      const iconRing =
+                        item.color === 'amber'
+                          ? 'from-amber-400/40 via-amber-500/25 to-yellow-600/15 ring-amber-500/30 dark:from-amber-500/35 dark:via-amber-600/20 dark:ring-amber-400/30'
+                          : 'from-emerald-400/35 via-emerald-500/25 to-teal-600/15 ring-emerald-500/30 dark:from-emerald-500/30 dark:via-emerald-600/15 dark:ring-emerald-400/25';
                       return (
                         <div
                           key={i}
-                          className={`relative rounded-lg border p-4 pt-11 text-center ${item.color === 'amber' ? 'border-amber-500/30 bg-amber-500/5' : 'border-emerald-500/30 bg-emerald-500/5'}`}
+                          className={`relative overflow-hidden rounded-xl border p-4 pt-12 text-center shadow-sm transition-shadow hover:shadow-md ${item.color === 'amber' ? 'border-amber-500/35 bg-gradient-to-b from-amber-500/[0.07] to-transparent' : 'border-emerald-500/35 bg-gradient-to-b from-emerald-500/[0.07] to-transparent'}`}
                         >
+                          <div
+                            className={`pointer-events-none absolute -end-6 -top-6 h-24 w-24 rounded-full opacity-[0.12] blur-2xl ${item.color === 'amber' ? 'bg-amber-400' : 'bg-emerald-400'}`}
+                            aria-hidden
+                          />
                           {shareBase && (
-                            <div className="absolute end-2 top-2">
+                            <div className="absolute end-2 top-2 z-10">
                               <PriceShareButton
                                 {...shareBase}
                                 size="icon"
@@ -1278,14 +1568,28 @@ export default function Home() {
                               />
                             </div>
                           )}
-                          <p className="mb-2 text-sm text-muted-foreground">{item.label}</p>
+                          <div
+                            className={`relative mx-auto mb-3 flex h-[4.75rem] w-[4.75rem] items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br p-2 shadow-md ring-1 ${iconRing}`}
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={cardImg}
+                              alt=""
+                              width={144}
+                              height={144}
+                              className="relative z-[1] h-full w-full object-contain drop-shadow-md"
+                              loading="lazy"
+                              decoding="async"
+                            />
+                          </div>
+                          <p className="relative mb-2 text-sm font-medium text-muted-foreground">{item.label}</p>
                           <p
-                            className={`text-2xl font-bold ${item.color === 'amber' ? 'text-amber-700 dark:text-amber-400' : 'text-emerald-700 dark:text-emerald-400'}`}
+                            className={`relative text-2xl font-bold tabular-nums ${item.color === 'amber' ? 'text-amber-700 dark:text-amber-400' : 'text-emerald-700 dark:text-emerald-400'}`}
                           >
                             {item.value}
                           </p>
-                          {item.suffix && <p className="text-xs text-muted-foreground mt-1">{item.suffix}</p>}
-                          <div className="mt-2 flex justify-center">
+                          {item.suffix && <p className="relative mt-1 text-xs text-muted-foreground">{item.suffix}</p>}
+                          <div className="relative mt-2 flex justify-center">
                             <RateDeltaBadge pct={item.deltaPct} />
                           </div>
                         </div>
@@ -1354,15 +1658,59 @@ export default function Home() {
             {/* Forex Tab */}
             <TabsContent value="forex" className="space-y-4">
               <div className="surface-card p-6">
-                <CardTitle className="mb-6 flex items-center gap-2 text-xl font-semibold text-foreground dark:text-slate-100">
+                <CardTitle className="mb-6 flex flex-wrap items-center gap-2 text-xl font-semibold text-foreground dark:text-slate-100">
                   <Globe className="h-5 w-5" />
                   {locale === 'ar' ? 'البورصات العالمية' : 'Global market rates'}
+                  {forexRealtime && (
+                    <span
+                      className={cn(
+                        'ms-1 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium',
+                        forexLiveConnected
+                          ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                          : 'border-amber-500/35 bg-amber-500/10 text-amber-800 dark:text-amber-200'
+                      )}
+                    >
+                      <Zap
+                        className={cn(
+                          'h-3.5 w-3.5',
+                          forexLiveConnected && 'text-emerald-600 dark:text-emerald-400'
+                        )}
+                        aria-hidden
+                      />
+                      {locale === 'ar'
+                        ? forexLiveConnected
+                          ? 'لحظي من الخادم'
+                          : 'جاري الاتصال…'
+                        : forexLiveConnected
+                          ? 'Live (server)'
+                          : 'Connecting…'}
+                    </span>
+                  )}
                 </CardTitle>
+                {forexRealtime && (!data?.forexRates || data.forexRates.length === 0) ? (
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    {locale === 'ar'
+                      ? 'لا توجد أزواج فوركس مطابقة للبث الحي. تأكد من أن «زوج الموقع» في لوحة التحكم موجود في جدول الفوركس، وأن رموز Finnhub صحيحة.'
+                      : 'No forex pairs match live mode. Ensure each «site pair» exists in the forex table and Finnhub symbols are valid.'}
+                  </p>
+                ) : null}
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                  {data?.forexRates?.map((pair) => (
+                  {data?.forexRates?.map((pair) => {
+                    const approxSyp = marketApproxSyp(
+                      pair.pair,
+                      Number(pair.rate),
+                      getFeaturedCurrency('USD')?.buyRate ?? null,
+                      data.forexRates
+                    );
+                    return (
                     <div
                       key={pair.pair}
-                      className="relative rounded-lg border border-border bg-muted/40 pt-11 dark:border-slate-700 dark:bg-slate-800/40 pe-4 pb-4 ps-4"
+                      className={cn(
+                        'relative rounded-lg border border-border bg-muted/40 pt-11 transition-all duration-300 dark:border-slate-700 dark:bg-slate-800/40 pe-4 pb-4 ps-4',
+                        FOREX_PAIR_CARD_CLASS[pair.pair] ?? 'border-cyan-500/25 bg-cyan-500/10',
+                        forexFlashByPair[pair.pair] === 'up' && 'border-emerald-500/40 bg-emerald-500/10',
+                        forexFlashByPair[pair.pair] === 'down' && 'border-red-500/40 bg-red-500/10'
+                      )}
                     >
                       {shareBase && (
                         <div className="absolute end-2 top-2">
@@ -1374,11 +1722,11 @@ export default function Home() {
                             subheadline={pair.pair}
                             rows={[
                               { label: locale === 'ar' ? 'السعر' : 'Rate', value: String(pair.rate), tone: 'neutral' },
-                              ...(getFeaturedCurrency('USD')
+                              ...(approxSyp != null
                                 ? [
                                     {
                                       label: `≈ ${getCurrencySymbol()}`,
-                                      value: formatNumber(pair.rate * getFeaturedCurrency('USD')!.buyRate),
+                                      value: formatNumber(approxSyp),
                                       tone: 'neutral' as const,
                                     },
                                   ]
@@ -1386,8 +1734,8 @@ export default function Home() {
                             ]}
                             fileNameSlug={`fx-${pair.pair.replace(/[\/\\]/g, '-')}`}
                             detailLine={
-                              getFeaturedCurrency('USD')
-                                ? `${pair.pair}: ${pair.rate} · ≈ ${formatNumber(pair.rate * getFeaturedCurrency('USD')!.buyRate)} ${getCurrencySymbol()}`
+                              approxSyp != null
+                                ? `${pair.pair}: ${pair.rate} · ≈ ${formatNumber(approxSyp)} ${getCurrencySymbol()}`
                                 : `${pair.pair}: ${pair.rate}`
                             }
                           />
@@ -1395,18 +1743,17 @@ export default function Home() {
                       )}
                       <div className="mb-2 flex items-center gap-2">
                         <div className="-space-x-1 flex items-center">
-                          <img
-                            src={`https://flagcdn.com/w40/${pair.flag1}.png`}
-                            alt={pair.flag1}
-                            className="h-3.5 w-5 rounded-sm border border-background object-cover shadow-sm"
-                          />
-                          <img
-                            src={`https://flagcdn.com/w40/${pair.flag2}.png`}
-                            alt={pair.flag2}
-                            className="h-3.5 w-5 rounded-sm border border-background object-cover shadow-sm"
-                          />
+                          <MarketBadge code={pair.flag1} />
+                          <MarketBadge code={pair.flag2} />
                         </div>
                         <span className="font-bold">{pair.pair}</span>
+                        {MARKET_ESTIMATED_SIZE_UNIT[pair.pair] && (
+                          <span className="rounded-full border border-border/60 bg-background/50 px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                            {locale === 'ar'
+                              ? MARKET_ESTIMATED_SIZE_UNIT[pair.pair]!.ar
+                              : MARKET_ESTIMATED_SIZE_UNIT[pair.pair]!.en}
+                          </span>
+                        )}
                         <span
                           className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-xs ${pair.change >= 0 ? 'bg-green-500/20 text-green-500' : 'bg-red-500/20 text-red-500'}`}
                         >
@@ -1419,14 +1766,23 @@ export default function Home() {
                           {Number.isFinite(pair.change) ? pair.change.toFixed(2) : pair.change}%
                         </span>
                       </div>
-                      <p className="text-xl font-bold text-foreground dark:text-slate-100">{pair.rate}</p>
-                      {getFeaturedCurrency('USD') && (
+                      <p className="text-xl font-bold text-foreground dark:text-slate-100">
+                        {Number(pair.rate).toFixed(3)}
+                      </p>
+                      {marketUsdPerKg(pair.pair, Number(pair.rate)) != null && (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {locale === 'ar' ? 'سعر الكيلو: ' : 'Per kg: '}
+                          {marketUsdPerKg(pair.pair, Number(pair.rate))!.toFixed(3)} $
+                        </p>
+                      )}
+                      {approxSyp != null && (
                         <p className="mt-1 text-sm text-muted-foreground">
-                          ≈ {formatNumber(pair.rate * getFeaturedCurrency('USD')!.buyRate)} {getCurrencySymbol()}
+                          ≈ {formatNumber(approxSyp)} {getCurrencySymbol()}
                         </p>
                       )}
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             </TabsContent>
@@ -1437,12 +1793,23 @@ export default function Home() {
                 <CardTitle className="mb-6 flex items-center gap-2 text-xl font-semibold text-foreground dark:text-slate-100">
                   <span className="text-2xl">₿</span>
                   {locale === 'ar' ? 'العملات الرقمية' : 'Cryptocurrencies'}
+                  {cryptoRealtime ? (
+                    <span className="ms-1 inline-flex items-center gap-1.5 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                      <Zap className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" aria-hidden />
+                      {locale === 'ar' ? 'لحظي من الخادم' : 'Live (server)'}
+                    </span>
+                  ) : null}
                 </CardTitle>
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                   {data?.cryptoRates?.map((crypto) => (
                     <div
                       key={crypto.code}
-                      className="relative rounded-lg border border-border bg-muted/40 pt-11 dark:border-slate-700 dark:bg-slate-800/40 pe-4 pb-4 ps-4"
+                      className={cn(
+                        'relative rounded-lg border border-border bg-muted/40 pt-11 transition-all duration-300 dark:border-slate-700 dark:bg-slate-800/40 pe-4 pb-4 ps-4',
+                        CRYPTO_BRAND_CARD_CLASS[crypto.code] ?? 'border-cyan-500/25 bg-cyan-500/10',
+                        cryptoFlashByCode[crypto.code] === 'up' && 'border-emerald-500/40 bg-emerald-500/10',
+                        cryptoFlashByCode[crypto.code] === 'down' && 'border-red-500/40 bg-red-500/10'
+                      )}
                     >
                       {shareBase && (
                         <div className="absolute end-2 top-2">
@@ -1455,7 +1822,7 @@ export default function Home() {
                             rows={[
                               {
                                 label: 'USD',
-                                value: `$${formatUsd(crypto.price, crypto.price < 1 ? 4 : 2)}`,
+                                value: `$${Number(crypto.price).toFixed(3)}`,
                                 tone: 'neutral',
                               },
                               ...(getFeaturedCurrency('USD')
@@ -1471,8 +1838,8 @@ export default function Home() {
                             fileNameSlug={`crypto-${crypto.code}`}
                             detailLine={
                               getFeaturedCurrency('USD')
-                                ? `${crypto.code}: $${formatUsd(crypto.price, crypto.price < 1 ? 4 : 2)} · ≈ ${formatNumber(crypto.price * getFeaturedCurrency('USD')!.buyRate)} ${getCurrencySymbol()}`
-                                : `${crypto.code}: $${formatUsd(crypto.price, crypto.price < 1 ? 4 : 2)}`
+                                ? `${crypto.code}: $${Number(crypto.price).toFixed(3)} · ≈ ${formatNumber(crypto.price * getFeaturedCurrency('USD')!.buyRate)} ${getCurrencySymbol()}`
+                                : `${crypto.code}: $${Number(crypto.price).toFixed(3)}`
                             }
                           />
                         </div>
@@ -1480,7 +1847,19 @@ export default function Home() {
                       <div className="mb-2 flex items-center justify-between gap-2">
                         <div className="flex min-w-0 items-center gap-2">
                           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border bg-muted text-2xl font-bold dark:border-slate-600 dark:bg-slate-800">
-                            {crypto.icon || '₿'}
+                            {!brokenCryptoIconByCode[crypto.code] ? (
+                              <img
+                                src={cryptoPngUrl(crypto.code)}
+                                alt={crypto.code}
+                                className="h-8 w-8 object-contain"
+                                loading="lazy"
+                                onError={() =>
+                                  setBrokenCryptoIconByCode((prev) => ({ ...prev, [crypto.code]: true }))
+                                }
+                              />
+                            ) : (
+                              crypto.icon || '₿'
+                            )}
                           </span>
                           <div className="min-w-0">
                             <span className="font-bold">{crypto.code}</span>
@@ -1502,7 +1881,7 @@ export default function Home() {
                         </span>
                       </div>
                       <p className="text-xl font-bold text-foreground dark:text-slate-100">
-                        ${formatUsd(crypto.price, crypto.price < 1 ? 4 : 2)}
+                        ${Number(crypto.price).toFixed(3)}
                       </p>
                       {getFeaturedCurrency('USD') && (
                         <p className="mt-1 text-sm text-muted-foreground">
@@ -1516,6 +1895,20 @@ export default function Home() {
             </TabsContent>
           </Tabs>
         </section>
+
+        {data.siteSettings.adsenseEnabled &&
+        data.siteSettings.adsenseAdClient &&
+        data.siteSettings.adsenseSlotContent ? (
+          <div className="relative z-10 mx-auto flex w-full max-w-7xl justify-center px-4 sm:px-6 lg:px-8">
+            <AdSenseSlot
+              client={data.siteSettings.adsenseAdClient}
+              slot={data.siteSettings.adsenseSlotContent}
+              labelAr="إعلان"
+              labelEn="Advertisement"
+              locale={locale}
+            />
+          </div>
+        ) : null}
 
         <section
           className="relative mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8"
@@ -1635,6 +2028,7 @@ export default function Home() {
                     labelTelegram={t('footer.socialTelegram')}
                     labelInstagram={t('footer.socialInstagram')}
                     labelYoutube={t('footer.socialYoutube')}
+                    labelTiktok={t('footer.socialTiktok')}
                   />
                 </div>
               </div>

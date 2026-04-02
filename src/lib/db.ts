@@ -71,6 +71,21 @@ export async function ensureSqliteSchema(): Promise<void> {
   await tryAlter(`ALTER TABLE SiteSettings ADD COLUMN footerSocialTelegram TEXT`);
   await tryAlter(`ALTER TABLE SiteSettings ADD COLUMN footerSocialInstagram TEXT`);
   await tryAlter(`ALTER TABLE SiteSettings ADD COLUMN footerSocialYoutube TEXT`);
+  await tryAlter(`ALTER TABLE SiteSettings ADD COLUMN footerSocialTiktok TEXT`);
+
+  await tryAlter(`ALTER TABLE SiteSettings ADD COLUMN forexRealtimeEnabled INTEGER NOT NULL DEFAULT 0`);
+  await tryAlter(`ALTER TABLE SiteSettings ADD COLUMN finnhubApiKey TEXT`);
+  await tryAlter(`ALTER TABLE SiteSettings ADD COLUMN finnhubForexSymbolMap TEXT`);
+  await tryAlter(`ALTER TABLE SiteSettings ADD COLUMN cryptoRealtimeEnabled INTEGER NOT NULL DEFAULT 0`);
+  await tryAlter(`ALTER TABLE SiteSettings ADD COLUMN cryptoRealtimeCodes TEXT`);
+  await tryAlter(`ALTER TABLE SiteSettings ADD COLUMN fuelVisibilityMap TEXT`);
+
+  await tryAlter(`ALTER TABLE SiteSettings ADD COLUMN adsenseEnabled INTEGER NOT NULL DEFAULT 0`);
+  await tryAlter(`ALTER TABLE SiteSettings ADD COLUMN adsensePublisherId TEXT`);
+  await tryAlter(`ALTER TABLE SiteSettings ADD COLUMN adsenseSiteVerification TEXT`);
+  await tryAlter(`ALTER TABLE SiteSettings ADD COLUMN adsTxtRaw TEXT`);
+  await tryAlter(`ALTER TABLE SiteSettings ADD COLUMN adsenseSlotHero TEXT`);
+  await tryAlter(`ALTER TABLE SiteSettings ADD COLUMN adsenseSlotContent TEXT`);
 
   sqliteSchemaEnsured = true;
 }

@@ -6,6 +6,9 @@ import { upsertExchangeRateWithSnapshot } from '@/lib/rate-snapshot';
 import { pctDeltaFromPrevious } from '@/lib/pct-delta';
 import ZAI from 'z-ai-web-dev-sdk';
 import { ratesApiOriginDenied } from '@/lib/api-origin-guard';
+import { readFooterSocialTiktok } from '@/lib/footer-social-tiktok';
+import { readFuelVisibilityMap } from '@/lib/fuel-visibility-db';
+import { normalizeCaPub } from '@/lib/adsense-config';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,6 +29,58 @@ const defaultCurrencies = [
   { code: 'AUD', nameAr: 'الدولار الأسترالي', nameEn: 'Australian Dollar', symbol: 'A$', flagEmoji: '🇦🇺', sortOrder: 9, buyRate: 8700, sellRate: 8800 },
   { code: 'JOD', nameAr: 'الدينار الأردني', nameEn: 'Jordanian Dinar', symbol: 'JD', flagEmoji: '🇯🇴', sortOrder: 10, buyRate: 19000, sellRate: 19200 },
 ];
+
+/**
+ * تأرجح مستمر حول السعر المخزّن (مركز ثابت من قاعدة البيانات).
+ * محدد زمنياً + بذرة العملة حتى يرى كل المستخدمون نفس الرقم في نفس اللحظة.
+ * نفس الإزاحة تُطبَّق على الشراء والبيع ليبقى الفارق بينهما ثابتاً تقريباً.
+ */
+function oscillationOffsetForCurrency(center: number, seed: string, nowMs: number): number {
+  const c = Number(center);
+  if (!Number.isFinite(c) || c <= 0) return 0;
+
+  let h = 2166136261;
+  for (let i = 0; i < seed.length; i++) {
+    h ^= seed.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  const phase = ((h >>> 0) % 6283) / 1000; // ~0..2π
+  const periodSec = 40 + ((h >>> 8) % 55); // 40..94 ثانية لدورة كاملة صعوداً وهبوطاً
+  const t = nowMs / 1000;
+  const w1 = (2 * Math.PI * t) / periodSec + phase;
+  const w2 = w1 * 1.73 + phase * 0.42;
+  const amp = Math.max(5, c * 0.0009);
+  return amp * (Math.sin(w1) * 0.82 + Math.sin(w2) * 0.18);
+}
+
+function displayRatesWithOscillation(
+  buyStored: number,
+  sellStored: number,
+  code: string,
+  nowMs: number
+): { buy: number; sell: number } {
+  const b = Number(buyStored);
+  const s = Number(sellStored);
+  if (!Number.isFinite(b) || b <= 0) return { buy: 0, sell: 0 };
+  if (!Number.isFinite(s) || s <= 0) return { buy: Math.round(b), sell: Math.round(b) };
+
+  const off = oscillationOffsetForCurrency((b + s) / 2, `fx-${code}`, nowMs);
+  let buy = Math.max(1, Math.round(b + off));
+  let sell = Math.max(1, Math.round(s + off));
+  if (sell <= buy) sell = buy + Math.max(1, Math.round(s - b));
+  return { buy, sell };
+}
+
+function smoothTowardTarget(prev: number | null, target: number): number {
+  if (!Number.isFinite(target) || target <= 0) return 0;
+  if (prev == null || !Number.isFinite(prev) || prev <= 0) return target;
+  const diff = target - prev;
+  if (diff === 0) return prev;
+  const maxStep = Math.max(15, Math.abs(prev) * 0.0035);
+  const signedStep = Math.sign(diff) * Math.min(Math.abs(diff), maxStep);
+  const softness = 0.72 + Math.random() * 0.2;
+  return Math.max(0, prev + signedStep * softness);
+}
 
 async function initializeDatabase() {
   try {
@@ -130,10 +185,12 @@ async function checkAutoUpdate() {
       
       const match = html.match(pattern);
       if (match) {
-        let buyRate = parseInt(match[1].replace(/,/g, ''));
-        let sellRate = parseInt(match[2].replace(/,/g, ''));
-        
-        // Apply adjustment (deduction or addition)
+        const rawBuy = parseInt(match[1].replace(/,/g, ''));
+        const rawSell = parseInt(match[2].replace(/,/g, ''));
+        let buyRate = rawBuy;
+        let sellRate = rawSell;
+
+        // Apply adjustment (deduction or addition) ثم نقطة عشوائية بين الخام والمعدل
         if (adjustmentType === 'deduction') {
           buyRate = Math.max(0, buyRate - adjustmentAmount);
           sellRate = Math.max(0, sellRate - adjustmentAmount);
@@ -141,7 +198,11 @@ async function checkAutoUpdate() {
           buyRate = buyRate + adjustmentAmount;
           sellRate = sellRate + adjustmentAmount;
         }
-        
+
+        const t = Math.random();
+        buyRate = Math.max(0, rawBuy + (buyRate - rawBuy) * t);
+        sellRate = Math.max(0, rawSell + (sellRate - rawSell) * t);
+
         if (!isNaN(buyRate) && !isNaN(sellRate) && buyRate > 0 && sellRate > 0) {
           rates.push({ code: currency, buyRate, sellRate });
         }
@@ -152,10 +213,16 @@ async function checkAutoUpdate() {
     for (const rate of rates) {
       const currency = await db.currency.findFirst({ where: { code: rate.code } });
       if (currency) {
+        const prev = await db.exchangeRate.findFirst({
+          where: { currencyId: currency.id },
+          orderBy: { updatedAt: 'desc' },
+        });
+        const buyRate = smoothTowardTarget(prev?.buyRate ?? null, rate.buyRate);
+        const sellRate = smoothTowardTarget(prev?.sellRate ?? null, rate.sellRate);
         await upsertExchangeRateWithSnapshot(db, {
           currencyId: currency.id,
-          buyRate: rate.buyRate,
-          sellRate: rate.sellRate,
+          buyRate,
+          sellRate,
         });
       }
     }
@@ -197,6 +264,8 @@ export async function GET(request: NextRequest) {
 
     // Get site settings
     const settings = await db.siteSettings.findFirst();
+    const footerTiktok =
+      settings?.id != null ? await readFooterSocialTiktok(db, settings.id) : null;
 
     let fuelPrices: Awaited<ReturnType<typeof db.fuelPrice.findMany>> = [];
     try {
@@ -205,11 +274,18 @@ export async function GET(request: NextRequest) {
       console.error('Could not fetch fuel prices:', e);
     }
 
+    const nowMs = Date.now();
     // Format the response
     const rates = currencies.map(currency => {
       const rate = currency.rates[0];
-      const buyRate = rate?.buyRate || 0;
-      const sellRate = rate?.sellRate || 0;
+      const buyStored = rate?.buyRate ?? 0;
+      const sellStored = rate?.sellRate ?? 0;
+      const { buy: buyRate, sell: sellRate } = displayRatesWithOscillation(
+        buyStored,
+        sellStored,
+        currency.code,
+        nowMs
+      );
       return {
         id: currency.id,
         code: currency.code,
@@ -220,8 +296,8 @@ export async function GET(request: NextRequest) {
         buyRate,
         sellRate,
         lastUpdated: rate?.lastUpdated || null,
-        changeBuyPct: pctDeltaFromPrevious(rate?.prevBuyRate ?? null, buyRate),
-        changeSellPct: pctDeltaFromPrevious(rate?.prevSellRate ?? null, sellRate),
+        changeBuyPct: pctDeltaFromPrevious(rate?.prevBuyRate ?? null, buyStored),
+        changeSellPct: pctDeltaFromPrevious(rate?.prevSellRate ?? null, sellStored),
       };
     });
 
@@ -236,6 +312,8 @@ export async function GET(request: NextRequest) {
       lastUpdated: f.lastUpdated,
       changePct: pctDeltaFromPrevious(f.prevPrice ?? null, f.price),
     }));
+    const fuelVisibilityMap = await readFuelVisibilityMap(settings?.id);
+    const visibleFuel = fuelOut.filter((f) => fuelVisibilityMap[f.code.toUpperCase()] !== false);
 
     return NextResponse.json({
       success: true,
@@ -248,7 +326,7 @@ export async function GET(request: NextRequest) {
           changeOuncePct: pctDeltaFromPrevious(goldPrice.prevPriceUsd ?? null, goldPrice.priceUsd),
           changeGramPct: pctDeltaFromPrevious(goldPrice.prevPricePerGram ?? null, goldPrice.pricePerGram),
         } : null,
-        fuelPrices: fuelOut,
+        fuelPrices: visibleFuel,
         siteName: settings?.siteName || 'سعر الليرة السورية',
         lastUpdate: settings?.lastUpdate || null,
         // Site Identity
@@ -277,6 +355,12 @@ export async function GET(request: NextRequest) {
           footerSocialTelegram: settings?.footerSocialTelegram ?? null,
           footerSocialInstagram: settings?.footerSocialInstagram ?? null,
           footerSocialYoutube: settings?.footerSocialYoutube ?? null,
+          footerSocialTiktok: footerTiktok,
+          fuelVisibilityMap,
+          adsenseEnabled: settings?.adsenseEnabled ?? false,
+          adsenseAdClient: normalizeCaPub(settings?.adsensePublisherId ?? null),
+          adsenseSlotHero: settings?.adsenseSlotHero ?? null,
+          adsenseSlotContent: settings?.adsenseSlotContent ?? null,
         }
       }
     });

@@ -78,6 +78,45 @@ function applyPair(buy: number, sell: number, c: CategorySyncConfig): { buy: num
   };
 }
 
+/**
+ * يحاكي "سلوك سوق" بسيط: بعد تطبيق التعديل، نختار نقطة عشوائية
+ * بين السعر الخام من SP Today والسعر بعد التعديل.
+ * - في الزيادة: الخام حد أدنى، والمعدل حد أعلى.
+ * - في النقصان: المعدل حد أدنى، والخام حد أعلى.
+ */
+function applyPairWithRandomSwing(
+  buy: number,
+  sell: number,
+  c: CategorySyncConfig
+): { buy: number; sell: number } {
+  const adjusted = applyPair(buy, sell, c);
+  const dBuy = adjusted.buy - buy;
+  const dSell = adjusted.sell - sell;
+  if ((!Number.isFinite(dBuy) && !Number.isFinite(dSell)) || (dBuy === 0 && dSell === 0)) {
+    return adjusted;
+  }
+  const t = Math.random(); // نفس المعامل للشراء والبيع للحفاظ على شكل السبريد
+  return {
+    buy: Math.max(0, buy + dBuy * t),
+    sell: Math.max(0, sell + dSell * t),
+  };
+}
+
+/** حركة أبطأ وأكثر إقناعاً: خطوة تدريجية من السعر السابق نحو الهدف. */
+function smoothTowardTarget(prev: number | null, target: number): number {
+  if (!Number.isFinite(target) || target <= 0) return 0;
+  if (prev == null || !Number.isFinite(prev) || prev <= 0) return target;
+  const diff = target - prev;
+  if (diff === 0) return prev;
+
+  // سقف الحركة في كل دورة (حوالي 0.35% مع حد أدنى عددي).
+  const maxStep = Math.max(15, Math.abs(prev) * 0.0035);
+  const signedStep = Math.sign(diff) * Math.min(Math.abs(diff), maxStep);
+  // نعومة إضافية: لا نأخذ كامل الخطوة دائماً.
+  const softness = 0.72 + Math.random() * 0.2; // 72%..92%
+  return Math.max(0, prev + signedStep * softness);
+}
+
 export function extractGoldUsd(html: string): { priceUsd: number; pricePerGram: number } | null {
   const ounce = html.match(
     /<h3 class="text-lg font-bold mb-1">Ounce<\/h3><p class="font-mono font-bold">\$<!-- -->([\d,]+)<\/p>/
@@ -182,17 +221,23 @@ export async function executeSpTodaySync(options: {
         mark('currencies', { ok: false, message: 'No currency rows parsed' });
       } else {
         rows = rows.map((row) => {
-          const adj = applyPair(row.buyRate, row.sellRate, c);
-          return { ...row, buyRate: adj.buy, sellRate: adj.sell };
+          const swung = applyPairWithRandomSwing(row.buyRate, row.sellRate, c);
+          return { ...row, buyRate: swung.buy, sellRate: swung.sell };
         });
         let updated = 0;
         for (const rate of rows) {
           const currency = await db.currency.findFirst({ where: { code: rate.code } });
           if (!currency) continue;
+          const prev = await db.exchangeRate.findFirst({
+            where: { currencyId: currency.id },
+            orderBy: { updatedAt: 'desc' },
+          });
+          const buyRate = smoothTowardTarget(prev?.buyRate ?? null, rate.buyRate);
+          const sellRate = smoothTowardTarget(prev?.sellRate ?? null, rate.sellRate);
           await upsertExchangeRateWithSnapshot(db, {
             currencyId: currency.id,
-            buyRate: rate.buyRate,
-            sellRate: rate.sellRate,
+            buyRate,
+            sellRate,
           });
           updated++;
         }

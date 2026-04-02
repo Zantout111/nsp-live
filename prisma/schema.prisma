@@ -149,6 +149,33 @@ model SiteSettings {
   footerSocialTelegram   String?
   footerSocialInstagram  String?
   footerSocialYoutube    String?
+  footerSocialTiktok     String?
+  /// JSON: { "GASOLINE_95": true, "DIESEL": false } لإظهار/إخفاء بطاقات المحروقات
+  fuelVisibilityMap      String?
+
+  /// بث فوركس لحظي عبر Finnhub (WebSocket من الخادم → SSE للعملاء)
+  forexRealtimeEnabled Boolean @default(false)
+  finnhubApiKey        String?
+  /// JSON: [{ "finnhubSymbol": "OANDA:EUR_USD", "pair": "EUR/USD" }]
+  finnhubForexSymbolMap String?
+
+  /// بث كريبتو حي من الخادم (CoinGecko poll → SSE)
+  cryptoRealtimeEnabled Boolean @default(false)
+  /// JSON: ["BTC","ETH","SOL"] — قائمة الأكواد المعروضة في الوضع الحي
+  cryptoRealtimeCodes   String?
+
+  /// Google AdSense — تفعيل سكربت الإعلانات والوحدات اليدوية
+  adsenseEnabled           Boolean @default(false)
+  /// معرّف الناشر: ca-pub-… (يُخزَّن بعد التطبيع)
+  adsensePublisherId       String?
+  /// قيمة content في وسم التحقق من Search Console / AdSense (بدون وسم HTML)
+  adsenseSiteVerification  String?
+  /// محتوى ملف ads.txt كاملاً؛ إن وُجد يُستخدم بدل السطر الافتراضي
+  adsTxtRaw                String?
+  /// data-ad-slot لوحدة أسفل الهيرو
+  adsenseSlotHero          String?
+  /// data-ad-slot لوحدة بين الأقسام (قبل كتلة SEO)
+  adsenseSlotContent       String?
 }
 
 enum ApiAccessRequestStatus {

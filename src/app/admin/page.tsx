@@ -10,6 +10,8 @@ import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Slider } from '@/components/ui/slider';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { LanguageSwitcher } from '@/components/language-switcher';
@@ -19,6 +21,7 @@ import { DEFAULT_LOGO_SIZES, parseLogoSizes, type LogoSizes } from '@/lib/logo-s
 import { resolveLogoUrlForClient } from '@/lib/resolve-logo-url';
 import type { SyncCategoryId, SyncConfigV1, CategorySyncConfig } from '@/lib/sync-config';
 import { SYNC_CATEGORY_IDS, defaultSyncConfigV1 } from '@/lib/sync-config';
+import { DEFAULT_MARKET_SYMBOL_ROWS } from '@/lib/finnhub-types';
 import { 
   RefreshCw, 
   Coins, 
@@ -42,6 +45,13 @@ import {
   Gauge,
   Code,
   Share2,
+  Zap,
+  Trash2,
+  Plus,
+  Loader2,
+  FlaskConical,
+  Bitcoin,
+  Megaphone,
 } from 'lucide-react';
 
 interface CurrencyRate {
@@ -69,6 +79,9 @@ interface SyncSettings {
   adjustmentType: 'deduction' | 'addition';
   lastFetchTime: string | null;
 }
+
+/** ما يظهر في تبويب المزامنة (بدون فوركس وعملات رقمية) */
+const SYNC_TAB_CATEGORY_IDS: SyncCategoryId[] = ['currencies', 'gold', 'fuel'];
 
 const SYNC_CATEGORY_LABEL: Record<SyncCategoryId, { ar: string; en: string; hintAr: string; hintEn: string }> = {
   currencies: {
@@ -98,10 +111,41 @@ const SYNC_CATEGORY_LABEL: Record<SyncCategoryId, { ar: string; en: string; hint
   forex: {
     ar: 'البورصات العالمية',
     en: 'Global markets',
-    hintAr: 'Frankfurter/ECB (مجاني) أو احتياطي من أسعار الليرة',
-    hintEn: 'Frankfurter/ECB (free) or SYP cross-rate fallback',
+    hintAr: 'Finnhub/Frankfurter + احتياط Yahoo للسلع (من الخادم)',
+    hintEn: 'Finnhub/Frankfurter + Yahoo fallback for commodities (server-side)',
   },
 };
+
+const FINNHUB_SYMBOL_DEFAULTS = DEFAULT_MARKET_SYMBOL_ROWS;
+
+const MARKET_ASSET_EMOJI: Record<string, string> = {
+  'asset-gold': '🥇',
+  'asset-oil': '🛢️',
+  'asset-gas': '🔥',
+  'asset-sugar': '🍬',
+  'asset-rice': '🌾',
+};
+
+function MarketBadge({ code }: { code: string }) {
+  const c = String(code || '').toLowerCase();
+  const emoji = MARKET_ASSET_EMOJI[c];
+  if (emoji) {
+    return (
+      <span className="inline-flex w-5 h-3.5 items-center justify-center rounded-sm border border-background bg-background/60 text-[10px] shadow-sm">
+        {emoji}
+      </span>
+    );
+  }
+  return (
+    <img
+      src={`https://flagcdn.com/w40/${c}.png`}
+      alt={c}
+      className="w-5 h-3.5 object-cover rounded-sm border border-background shadow-sm"
+    />
+  );
+}
+
+const CRYPTO_RT_DEFAULT_CODES = ['BTC', 'ETH', 'SOL'];
 
 interface SiteIdentity {
   siteName: string;
@@ -122,6 +166,7 @@ interface SiteIdentity {
   footerSocialTelegram: string;
   footerSocialInstagram: string;
   footerSocialYoutube: string;
+  footerSocialTiktok: string;
 }
 
 interface VisualIdentity {
@@ -167,6 +212,8 @@ interface CryptoRateData {
   lastUpdated: string;
 }
 
+type FuelVisibilityMap = Record<string, boolean>;
+
 interface ApiAccessRequestRow {
   id: string;
   fullName: string;
@@ -181,6 +228,36 @@ interface ApiAccessRequestRow {
   adminNote: string | null;
   createdAt: string;
 }
+
+type FinnhubSymbolTestRow = {
+  finnhubSymbol: string;
+  pair: string;
+  httpStatus?: number;
+  finnhubStatus?: string;
+  lastClose?: number | null;
+  candleCount?: number;
+  error?: string | null;
+  fallbackClose?: number | null;
+  fallbackSource?: 'frankfurter' | 'yahoo' | null;
+};
+
+type FinnhubTestApiResponse = {
+  success: boolean;
+  error?: string;
+  configured?: { enabled: boolean; hasKey: boolean; symbolCount: number };
+  websocket?: { open: boolean };
+  rest?: { ok: boolean; message?: string };
+  perSymbol?: FinnhubSymbolTestRow[];
+};
+
+type CryptoLiveTestRow = { code: string; ok: boolean; price: number | null; change: number | null };
+type CryptoLiveTestResponse = {
+  success: boolean;
+  error?: string;
+  configured?: { enabled: boolean; codeCount: number };
+  result?: { ok: boolean; message?: string };
+  rows?: CryptoLiveTestRow[];
+};
 
 interface ApiAllowedDomainRow {
   id: string;
@@ -241,6 +318,7 @@ export default function AdminPage() {
     footerSocialTelegram: '',
     footerSocialInstagram: '',
     footerSocialYoutube: '',
+    footerSocialTiktok: '',
   });
   const [uploadingLogo, setUploadingLogo] = useState(false);
   
@@ -263,9 +341,38 @@ export default function AdminPage() {
   const [forexRates, setForexRates] = useState<ForexRateData[]>([]);
   const [cryptoRates, setCryptoRates] = useState<CryptoRateData[]>([]);
   const [editingFuel, setEditingFuel] = useState<Record<string, string>>({});
+  const [fuelVisibilityMap, setFuelVisibilityMap] = useState<FuelVisibilityMap>({});
+  const [savingFuelVisibility, setSavingFuelVisibility] = useState(false);
   const [editingForex, setEditingForex] = useState<Record<string, { rate: string; change: string }>>({});
   const [editingCrypto, setEditingCrypto] = useState<Record<string, { price: string; change: string }>>({});
-  
+  const [finnhubForm, setFinnhubForm] = useState({
+    realtimeEnabled: false,
+    apiKeyInput: '',
+    finnhubApiKeySet: false,
+    clearApiKey: false,
+    symbolRows: FINNHUB_SYMBOL_DEFAULTS,
+  });
+  const [savingFinnhub, setSavingFinnhub] = useState(false);
+  const [finnhubTestLoading, setFinnhubTestLoading] = useState(false);
+  const [finnhubTestResult, setFinnhubTestResult] = useState<FinnhubTestApiResponse | null>(null);
+  const [cryptoLiveForm, setCryptoLiveForm] = useState<{ enabled: boolean; codes: string[] }>({
+    enabled: false,
+    codes: CRYPTO_RT_DEFAULT_CODES,
+  });
+  const [savingCryptoLive, setSavingCryptoLive] = useState(false);
+  const [cryptoLiveTestLoading, setCryptoLiveTestLoading] = useState(false);
+  const [cryptoLiveTestResult, setCryptoLiveTestResult] = useState<CryptoLiveTestResponse | null>(null);
+
+  const [adsenseForm, setAdsenseForm] = useState({
+    enabled: false,
+    publisherId: '',
+    siteVerification: '',
+    adsTxtRaw: '',
+    slotHero: '',
+    slotContent: '',
+  });
+  const [savingAdsense, setSavingAdsense] = useState(false);
+
   const [apiAccessLoading, setApiAccessLoading] = useState(false);
   const [apiRequests, setApiRequests] = useState<ApiAccessRequestRow[]>([]);
   const [apiDomains, setApiDomains] = useState<ApiAllowedDomainRow[]>([]);
@@ -356,6 +463,7 @@ export default function AdminPage() {
           footerSocialTelegram: result.settings.footerSocialTelegram ?? '',
           footerSocialInstagram: result.settings.footerSocialInstagram ?? '',
           footerSocialYoutube: result.settings.footerSocialYoutube ?? '',
+          footerSocialTiktok: result.settings.footerSocialTiktok ?? '',
         });
         setVisualIdentity({
           lightPrimaryColor: result.settings.lightPrimaryColor || '#0ea5e9',
@@ -374,6 +482,48 @@ export default function AdminPage() {
         setPlatformApiSubscriptionDays(
           d !== undefined && d !== null && Number.isFinite(Number(d)) ? String(Math.round(Number(d))) : '365'
         );
+        const rows = result.settings.finnhubForexSymbolRows as { finnhubSymbol: string; pair: string }[] | undefined;
+        setFinnhubForm((prev) => ({
+          ...prev,
+          realtimeEnabled: Boolean(result.settings.forexRealtimeEnabled),
+          finnhubApiKeySet: Boolean(result.settings.finnhubApiKeySet),
+          apiKeyInput: '',
+          clearApiKey: false,
+          symbolRows:
+            Array.isArray(rows) && rows.length > 0
+              ? rows.map((r) => ({
+                  finnhubSymbol: String(r.finnhubSymbol ?? '').trim(),
+                  pair: String(r.pair ?? '').trim(),
+                }))
+              : FINNHUB_SYMBOL_DEFAULTS,
+        }));
+        const codes = Array.isArray(result.settings.cryptoRealtimeCodes)
+          ? (result.settings.cryptoRealtimeCodes as unknown[])
+              .map((x) => String(x ?? '').trim().toUpperCase())
+              .filter(Boolean)
+          : [];
+        setCryptoLiveForm({
+          enabled: Boolean(result.settings.cryptoRealtimeEnabled),
+          codes: codes.length > 0 ? codes : CRYPTO_RT_DEFAULT_CODES,
+        });
+        setAdsenseForm({
+          enabled: Boolean(result.settings.adsenseEnabled),
+          publisherId: result.settings.adsensePublisherId ?? '',
+          siteVerification: result.settings.adsenseSiteVerification ?? '',
+          adsTxtRaw: result.settings.adsTxtRaw ?? '',
+          slotHero: result.settings.adsenseSlotHero ?? '',
+          slotContent: result.settings.adsenseSlotContent ?? '',
+        });
+        const visRaw = result.settings.fuelVisibilityMap;
+        const next: FuelVisibilityMap = {};
+        if (visRaw && typeof visRaw === 'object' && !Array.isArray(visRaw)) {
+          for (const [k, v] of Object.entries(visRaw as Record<string, unknown>)) {
+            const code = String(k ?? '').trim().toUpperCase();
+            if (!code) continue;
+            next[code] = Boolean(v);
+          }
+        }
+        setFuelVisibilityMap(next);
       }
     } catch (error) {
       console.error('Error fetching settings:', error);
@@ -425,7 +575,7 @@ export default function AdminPage() {
         const editForex: Record<string, { rate: string; change: string }> = {};
         forexResult.data.forEach((forex: ForexRateData) => {
           editForex[forex.pair] = {
-            rate: forex.rate.toString(),
+            rate: Number(forex.rate).toFixed(3),
             change: forex.change.toString()
           };
         });
@@ -440,7 +590,7 @@ export default function AdminPage() {
         const editCrypto: Record<string, { price: string; change: string }> = {};
         cryptoResult.data.forEach((crypto: CryptoRateData) => {
           editCrypto[crypto.code] = {
-            price: crypto.price.toString(),
+            price: Number(crypto.price).toFixed(3),
             change: crypto.change.toString()
           };
         });
@@ -764,6 +914,263 @@ export default function AdminPage() {
     }
   };
 
+  const handleSaveFuelVisibility = async () => {
+    setSavingFuelVisibility(true);
+    try {
+      const response = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ fuelVisibilityMap }),
+      });
+      const result = (await response.json().catch(() => ({}))) as {
+        success?: boolean;
+        error?: string;
+        details?: string;
+      };
+      if (!response.ok || !result.success) {
+        const hint = [result.details, result.error].filter(Boolean).join(' — ');
+        toast({
+          title: locale === 'ar' ? 'فشل الحفظ' : 'Save failed',
+          description:
+            hint ||
+            (locale === 'ar' ? 'تعذّر حفظ إعدادات إظهار المحروقات' : 'Could not save fuel visibility settings'),
+          variant: 'destructive',
+        });
+        return;
+      }
+      toast({
+        title: locale === 'ar' ? 'تم الحفظ' : 'Saved',
+        description:
+          locale === 'ar'
+            ? 'تم حفظ إعدادات إظهار/إخفاء بطاقات المحروقات'
+            : 'Fuel card visibility settings saved',
+      });
+      loadSettings();
+    } catch {
+      toast({
+        title: locale === 'ar' ? 'خطأ' : 'Error',
+        description: locale === 'ar' ? 'فشل الاتصال' : 'Request failed',
+        variant: 'destructive',
+      });
+    } finally {
+      setSavingFuelVisibility(false);
+    }
+  };
+
+  const handleSaveFinnhubForex = async () => {
+    setSavingFinnhub(true);
+    try {
+      const body: Record<string, unknown> = {
+        forexRealtimeEnabled: finnhubForm.realtimeEnabled,
+        finnhubForexSymbolRows: finnhubForm.symbolRows.filter(
+          (r) => r.finnhubSymbol.trim() && r.pair.trim()
+        ),
+      };
+      if (finnhubForm.clearApiKey) body.clearFinnhubApiKey = true;
+      if (finnhubForm.apiKeyInput.trim()) body.finnhubApiKey = finnhubForm.apiKeyInput.trim();
+
+      const response = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        credentials: 'include',
+      });
+      const result = (await response.json().catch(() => ({}))) as {
+        success?: boolean;
+        error?: string;
+        details?: string;
+      };
+      if (!response.ok || !result.success) {
+        const hint = [result.details, result.error].filter(Boolean).join(' — ');
+        toast({
+          title: locale === 'ar' ? 'فشل الحفظ' : 'Save failed',
+          description: hint || (locale === 'ar' ? 'تعذّر حفظ إعدادات Finnhub' : 'Could not save Finnhub settings'),
+          variant: 'destructive',
+        });
+        return;
+      }
+      toast({
+        title: locale === 'ar' ? 'تم الحفظ' : 'Saved',
+        description:
+          locale === 'ar'
+            ? 'تم حفظ Finnhub. أعد تشغيل الخادم إن لم يبدأ البث تلقائياً.'
+            : 'Finnhub settings saved. Restart the server if the stream does not start.',
+      });
+      setFinnhubForm((p) => ({ ...p, apiKeyInput: '', clearApiKey: false }));
+      loadSettings();
+    } catch {
+      toast({
+        title: locale === 'ar' ? 'خطأ' : 'Error',
+        description: locale === 'ar' ? 'فشل الاتصال' : 'Request failed',
+        variant: 'destructive',
+      });
+    } finally {
+      setSavingFinnhub(false);
+    }
+  };
+
+  const handleFinnhubConnectionTest = async () => {
+    setFinnhubTestLoading(true);
+    setFinnhubTestResult(null);
+    try {
+      const response = await fetch('/api/admin/finnhub-test', {
+        method: 'GET',
+        credentials: 'include',
+        cache: 'no-store',
+      });
+      const result = (await response.json().catch(() => ({}))) as FinnhubTestApiResponse;
+      setFinnhubTestResult(result);
+      if (!response.ok || !result.success) {
+        toast({
+          title: locale === 'ar' ? 'فشل الاختبار' : 'Test failed',
+          description:
+            result.error ||
+            (locale === 'ar' ? 'تحقق من تسجيل الدخول للوحة التحكم' : 'Check admin login'),
+          variant: 'destructive',
+        });
+        return;
+      }
+      toast({
+        title: locale === 'ar' ? 'اكتمل الاختبار' : 'Test finished',
+        description:
+          result.rest?.ok
+            ? locale === 'ar'
+              ? 'وُجدت بيانات أسعار صالحة من Finnhub'
+              : 'Valid price data received from Finnhub'
+            : locale === 'ar'
+              ? 'راجع تفاصيل الاختبار أدناه'
+              : 'See details below',
+      });
+    } catch {
+      setFinnhubTestResult({ success: false, error: 'network' });
+      toast({
+        title: locale === 'ar' ? 'خطأ' : 'Error',
+        description: locale === 'ar' ? 'تعذّر الاتصال بالخادم' : 'Could not reach server',
+        variant: 'destructive',
+      });
+    } finally {
+      setFinnhubTestLoading(false);
+    }
+  };
+
+  const handleSaveAdsense = async () => {
+    setSavingAdsense(true);
+    try {
+      const response = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          adsenseEnabled: adsenseForm.enabled,
+          adsensePublisherId: adsenseForm.publisherId.trim() || null,
+          adsenseSiteVerification: adsenseForm.siteVerification.trim() || null,
+          adsTxtRaw: adsenseForm.adsTxtRaw.trim() || null,
+          adsenseSlotHero: adsenseForm.slotHero.trim() || null,
+          adsenseSlotContent: adsenseForm.slotContent.trim() || null,
+        }),
+      });
+      const result = (await response.json().catch(() => ({}))) as { success?: boolean };
+      if (!response.ok || !result.success) {
+        toast({
+          title: locale === 'ar' ? 'فشل الحفظ' : 'Save failed',
+          variant: 'destructive',
+        });
+        return;
+      }
+      toast({
+        title: locale === 'ar' ? 'تم الحفظ' : 'Saved',
+        description:
+          locale === 'ar'
+            ? 'تم حفظ إعدادات AdSense وملف ads.txt والتحقق من الموقع.'
+            : 'AdSense, ads.txt, and site verification settings saved.',
+      });
+      await loadSettings();
+    } catch {
+      toast({
+        title: locale === 'ar' ? 'خطأ' : 'Error',
+        description: locale === 'ar' ? 'فشل الاتصال' : 'Request failed',
+        variant: 'destructive',
+      });
+    } finally {
+      setSavingAdsense(false);
+    }
+  };
+
+  const handleSaveCryptoLive = async () => {
+    setSavingCryptoLive(true);
+    try {
+      const body = {
+        cryptoRealtimeEnabled: cryptoLiveForm.enabled,
+        cryptoRealtimeCodes: cryptoLiveForm.codes,
+      };
+      const response = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        credentials: 'include',
+      });
+      const result = (await response.json().catch(() => ({}))) as { success?: boolean; error?: string; details?: string };
+      if (!response.ok || !result.success) {
+        toast({
+          title: locale === 'ar' ? 'فشل الحفظ' : 'Save failed',
+          description: result.details || result.error || 'Could not save crypto live settings',
+          variant: 'destructive',
+        });
+        return;
+      }
+      toast({
+        title: locale === 'ar' ? 'تم الحفظ' : 'Saved',
+        description: locale === 'ar' ? 'تم حفظ إعدادات الكريبتو الحية' : 'Crypto live settings saved',
+      });
+      loadSettings();
+    } catch {
+      toast({
+        title: locale === 'ar' ? 'خطأ' : 'Error',
+        description: locale === 'ar' ? 'فشل الاتصال' : 'Request failed',
+        variant: 'destructive',
+      });
+    } finally {
+      setSavingCryptoLive(false);
+    }
+  };
+
+  const handleCryptoLiveTest = async () => {
+    setCryptoLiveTestLoading(true);
+    setCryptoLiveTestResult(null);
+    try {
+      const res = await fetch('/api/admin/crypto-test', { credentials: 'include', cache: 'no-store' });
+      const j = (await res.json().catch(() => ({}))) as CryptoLiveTestResponse;
+      setCryptoLiveTestResult(j);
+      if (!res.ok || !j.success) {
+        toast({
+          title: locale === 'ar' ? 'فشل الاختبار' : 'Test failed',
+          description: j.error || 'Crypto test failed',
+          variant: 'destructive',
+        });
+        return;
+      }
+      toast({
+        title: locale === 'ar' ? 'اكتمل الاختبار' : 'Test finished',
+        description: j.result?.ok
+          ? locale === 'ar'
+            ? 'تم جلب أسعار كريبتو حية'
+            : 'Live crypto prices received'
+          : locale === 'ar'
+            ? 'لا توجد بيانات حالياً'
+            : 'No live rows returned',
+      });
+    } catch {
+      toast({
+        title: locale === 'ar' ? 'خطأ' : 'Error',
+        description: locale === 'ar' ? 'فشل الاتصال' : 'Request failed',
+        variant: 'destructive',
+      });
+    } finally {
+      setCryptoLiveTestLoading(false);
+    }
+  };
+
   // Update forex rate
   const handleUpdateForex = async (pair: string) => {
     const data = editingForex[pair];
@@ -914,13 +1321,18 @@ export default function AdminPage() {
   const handleUpdateSyncSettings = async () => {
     setSavingSettings(true);
     try {
-      const cfg = resolvedSyncConfig();
+      const base = resolvedSyncConfig();
+      const categories = {
+        ...base.categories,
+        crypto: { ...base.categories.crypto, enabled: false },
+        forex: { ...base.categories.forex, enabled: false },
+      };
       const response = await fetch('/api/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           autoUpdateEnabled: syncSettings.autoUpdateEnabled,
-          syncConfig: { categories: cfg.categories },
+          syncConfig: { categories },
         }),
       });
       
@@ -1331,6 +1743,10 @@ export default function AdminPage() {
               <Palette className="w-4 h-4" />
               <span className="hidden lg:inline">{locale === 'ar' ? 'الألوان' : 'Colors'}</span>
             </TabsTrigger>
+            <TabsTrigger value="adsense" className="flex items-center gap-1">
+              <Megaphone className="w-4 h-4" />
+              <span className="hidden lg:inline">AdSense</span>
+            </TabsTrigger>
             <TabsTrigger value="api" className="flex items-center gap-1">
               <Code className="w-4 h-4" />
               <span className="hidden lg:inline">API</span>
@@ -1524,10 +1940,26 @@ export default function AdminPage() {
           <TabsContent value="fuel" className="space-y-6">
             <Card className="bg-card/50 border-border backdrop-blur-sm">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Fuel className="w-5 h-5 text-primary" />
-                  {locale === 'ar' ? 'أسعار المحروقات' : 'Fuel Prices'}
-                </CardTitle>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <CardTitle className="flex items-center gap-2">
+                    <Fuel className="w-5 h-5 text-primary" />
+                    {locale === 'ar' ? 'أسعار المحروقات' : 'Fuel Prices'}
+                  </CardTitle>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => void handleSaveFuelVisibility()}
+                    disabled={savingFuelVisibility}
+                  >
+                    {savingFuelVisibility
+                      ? locale === 'ar'
+                        ? 'جاري الحفظ…'
+                        : 'Saving…'
+                      : locale === 'ar'
+                        ? 'حفظ الإظهار/الإخفاء'
+                        : 'Save visibility'}
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -1541,6 +1973,21 @@ export default function AdminPage() {
                         <div>
                           <p className="font-bold">{locale === 'ar' ? fuel.nameAr : fuel.nameEn}</p>
                           <p className="text-sm text-muted-foreground">{fuel.code} • {locale === 'ar' ? fuel.unitAr : fuel.unitEn}</p>
+                        </div>
+                        <div className="ms-auto flex items-center gap-2">
+                          <Label htmlFor={`fuel-visible-${fuel.code}`} className="text-xs text-muted-foreground">
+                            {locale === 'ar' ? 'إظهار' : 'Visible'}
+                          </Label>
+                          <Switch
+                            id={`fuel-visible-${fuel.code}`}
+                            checked={fuelVisibilityMap[fuel.code.toUpperCase()] !== false}
+                            onCheckedChange={(v) =>
+                              setFuelVisibilityMap((prev) => ({
+                                ...prev,
+                                [fuel.code.toUpperCase()]: v,
+                              }))
+                            }
+                          />
                         </div>
                       </div>
                       
@@ -1576,6 +2023,341 @@ export default function AdminPage() {
 
           {/* Tab 3: Forex Rates */}
           <TabsContent value="forex" className="space-y-6">
+            <Card className="border-primary/20 bg-primary/5 backdrop-blur-sm">
+              <CardHeader>
+                <CardTitle className="flex flex-wrap items-center gap-2 text-base">
+                  <Zap className="h-5 w-5 text-primary" />
+                  {locale === 'ar' ? 'Finnhub — بث لحظي من الخادم' : 'Finnhub — server-side live stream'}
+                </CardTitle>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  {locale === 'ar'
+                    ? 'الاتصال من الخادم فقط. طبقة Finnhub المجانية قد ترفض بعض الرموز (403) — يتم استخدام احتياط Frankfurter وYahoo تلقائياً حسب الأصل. راجع '
+                    : 'Server-side only. The free Finnhub tier may block some symbols (403) — Frankfurter/Yahoo fallbacks are used automatically by asset type. See '}
+                  <a
+                    href="https://finnhub.io/docs/api/websocket-trades"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary underline-offset-2 hover:underline"
+                  >
+                    WebSocket trades
+                  </a>
+                  {locale === 'ar' ? ' للرموز المدعومة.' : ' for supported symbols.'}
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      id="finnhub-realtime"
+                      checked={finnhubForm.realtimeEnabled}
+                      onCheckedChange={(v) => setFinnhubForm((p) => ({ ...p, realtimeEnabled: v }))}
+                    />
+                    <Label htmlFor="finnhub-realtime" className="text-sm font-medium cursor-pointer">
+                      {locale === 'ar' ? 'تفعيل البث اللحظي' : 'Enable live streaming'}
+                    </Label>
+                  </div>
+                  <Button type="button" variant="outline" size="sm" className="shrink-0" asChild>
+                    <a
+                      href="https://finnhub.io/register"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {locale === 'ar' ? 'الحصول على API Key' : 'Get API key'}
+                    </a>
+                  </Button>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs">
+                    {locale === 'ar' ? 'مفتاح Finnhub API' : 'Finnhub API key'}
+                  </Label>
+                  <Input
+                    type="password"
+                    autoComplete="off"
+                    placeholder={
+                      finnhubForm.finnhubApiKeySet
+                        ? locale === 'ar'
+                          ? 'اتركه فارغاً للإبقاء على المفتاح المحفوظ'
+                          : 'Leave blank to keep the saved key'
+                        : locale === 'ar'
+                          ? 'الصق المفتاح هنا'
+                          : 'Paste your key here'
+                    }
+                    value={finnhubForm.apiKeyInput}
+                    onChange={(e) => setFinnhubForm((p) => ({ ...p, apiKeyInput: e.target.value }))}
+                    className="font-mono text-sm"
+                  />
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="finnhub-clear-key"
+                      checked={finnhubForm.clearApiKey}
+                      onCheckedChange={(c) =>
+                        setFinnhubForm((p) => ({ ...p, clearApiKey: c === true }))
+                      }
+                    />
+                    <Label htmlFor="finnhub-clear-key" className="text-xs cursor-pointer font-normal">
+                      {locale === 'ar' ? 'حذف المفتاح المحفوظ' : 'Remove saved API key'}
+                    </Label>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <Label className="text-xs font-medium">
+                      {locale === 'ar' ? 'ربط رمز Finnhub ← زوج العرض' : 'Finnhub symbol → display pair'}
+                    </Label>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 text-xs"
+                      onClick={() => setFinnhubForm((p) => ({ ...p, symbolRows: [...FINNHUB_SYMBOL_DEFAULTS] }))}
+                    >
+                      {locale === 'ar' ? 'تعبئة افتراضية' : 'Load defaults'}
+                    </Button>
+                  </div>
+                  <div className="rounded-lg border border-border overflow-hidden">
+                    <div className="grid grid-cols-[1fr_1fr_auto] gap-2 bg-muted/50 px-3 py-2 text-xs font-medium">
+                      <span>Finnhub symbol</span>
+                      <span>{locale === 'ar' ? 'الزوج في الموقع' : 'Site pair'}</span>
+                      <span className="w-8" />
+                    </div>
+                    <div className="divide-y divide-border">
+                      {finnhubForm.symbolRows.map((row, idx) => (
+                        <div
+                          key={`fh-row-${idx}`}
+                          className="grid grid-cols-[1fr_1fr_auto] gap-2 items-center px-3 py-2"
+                        >
+                          <Input
+                            className="h-9 font-mono text-xs"
+                            placeholder="OANDA:EUR_USD"
+                            value={row.finnhubSymbol}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setFinnhubForm((p) => {
+                                const next = [...p.symbolRows];
+                                next[idx] = { ...next[idx], finnhubSymbol: v };
+                                return { ...p, symbolRows: next };
+                              });
+                            }}
+                          />
+                          <select
+                            className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                            value={row.pair}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setFinnhubForm((p) => {
+                                const next = [...p.symbolRows];
+                                next[idx] = { ...next[idx], pair: v };
+                                return { ...p, symbolRows: next };
+                              });
+                            }}
+                          >
+                            {row.pair && !forexRates.some((fx) => fx.pair === row.pair) ? (
+                              <option value={row.pair}>{row.pair}</option>
+                            ) : null}
+                            {(forexRates.length > 0 ? forexRates : [{ pair: 'EUR/USD' } as ForexRateData]).map(
+                              (fx) => (
+                                <option key={fx.pair} value={fx.pair}>
+                                  {fx.pair}
+                                </option>
+                              )
+                            )}
+                          </select>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-9 w-9 shrink-0 text-destructive"
+                            onClick={() =>
+                              setFinnhubForm((p) => ({
+                                ...p,
+                                symbolRows: p.symbolRows.filter((_, i) => i !== idx),
+                              }))
+                            }
+                            aria-label={locale === 'ar' ? 'حذف الصف' : 'Remove row'}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="w-full sm:w-auto"
+                    onClick={() =>
+                      setFinnhubForm((p) => ({
+                        ...p,
+                        symbolRows: [
+                          ...p.symbolRows,
+                          { finnhubSymbol: '', pair: forexRates[0]?.pair ?? 'EUR/USD' },
+                        ],
+                      }))
+                    }
+                  >
+                    <Plus className="h-4 w-4 me-1" />
+                    {locale === 'ar' ? 'صف جديد' : 'Add row'}
+                  </Button>
+                </div>
+
+                <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 text-sm font-medium">
+                      <FlaskConical className="h-4 w-4 text-primary shrink-0" />
+                      {locale === 'ar' ? 'اختبار الاتصال والبيانات' : 'Connection & data test'}
+                    </div>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      disabled={finnhubTestLoading}
+                      onClick={() => void handleFinnhubConnectionTest()}
+                    >
+                      {finnhubTestLoading ? (
+                        <>
+                          <Loader2 className="h-4 w-4 me-1 animate-spin" />
+                          {locale === 'ar' ? 'جاري الاختبار…' : 'Testing…'}
+                        </>
+                      ) : locale === 'ar' ? (
+                        'تشغيل الاختبار'
+                      ) : (
+                        'Run test'
+                      )}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    {locale === 'ar'
+                      ? 'يُقرأ المفتاح والرموز المحفوظة في قاعدة البيانات (احفظ التغييرات أولاً إن عدّلتها). يتحقق من مقبس WebSocket على هذا الخادم ومن واجهة REST لشموع الفوركس.'
+                      : 'Uses the API key and symbols saved in the database (save changes first if you edited them). Checks the WebSocket on this server and the forex candle REST API.'}
+                  </p>
+                  {finnhubTestResult?.success && finnhubTestResult.configured ? (
+                    <div className="space-y-2 text-xs">
+                      <div className="grid gap-1 sm:grid-cols-2">
+                        <div className="rounded-md bg-background/80 px-2 py-1.5 border border-border">
+                          <span className="text-muted-foreground">
+                            {locale === 'ar' ? 'التفعيل / المفتاح / الرموز' : 'Enabled / key / symbols'}
+                          </span>
+                          <div className="font-mono tabular-nums mt-0.5">
+                            {finnhubTestResult.configured.enabled ? 'on' : 'off'} ·{' '}
+                            {finnhubTestResult.configured.hasKey ? 'key' : 'no-key'} ·{' '}
+                            {finnhubTestResult.configured.symbolCount}
+                          </div>
+                        </div>
+                        <div className="rounded-md bg-background/80 px-2 py-1.5 border border-border">
+                          <span className="text-muted-foreground">WebSocket</span>
+                          <div
+                            className={`mt-0.5 font-medium ${finnhubTestResult.websocket?.open ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-700 dark:text-amber-300'}`}
+                          >
+                            {finnhubTestResult.websocket?.open
+                              ? locale === 'ar'
+                                ? 'مفتوح على الخادم'
+                                : 'Open on server'
+                              : locale === 'ar'
+                                ? 'غير متصل (قد يكون طبيعياً للفوركس)'
+                                : 'Not connected (may be normal for FX)'}
+                          </div>
+                        </div>
+                      </div>
+                      <div
+                        className={`rounded-md px-2 py-1.5 border ${
+                          finnhubTestResult.rest?.ok
+                            ? 'border-emerald-500/30 bg-emerald-500/5'
+                            : 'border-amber-500/30 bg-amber-500/5'
+                        }`}
+                      >
+                        <span className="text-muted-foreground">REST / candles</span>
+                        <div className="mt-0.5">{finnhubTestResult.rest?.message}</div>
+                      </div>
+                      {finnhubTestResult.perSymbol && finnhubTestResult.perSymbol.length > 0 ? (
+                        <div className="max-h-48 overflow-auto rounded-md border border-border">
+                          <table className="w-full text-left text-[11px] sm:text-xs">
+                            <thead className="sticky top-0 bg-muted/90 backdrop-blur-sm">
+                              <tr className="border-b border-border">
+                                <th className="p-2 font-medium">Symbol</th>
+                                <th className="p-2 font-medium">Pair</th>
+                                <th className="p-2 font-medium">HTTP</th>
+                                <th className="p-2 font-medium">s</th>
+                                <th className="p-2 font-medium">Finnhub</th>
+                                <th className="p-2 font-medium">ECB</th>
+                                <th className="p-2 font-medium">{locale === 'ar' ? 'ملاحظة' : 'Note'}</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {finnhubTestResult.perSymbol.map((row, i) => (
+                                <tr key={`ft-${i}-${row.finnhubSymbol}`} className="border-b border-border/60">
+                                  <td className="p-2 font-mono break-all">{row.finnhubSymbol || '—'}</td>
+                                  <td className="p-2">{row.pair}</td>
+                                  <td className="p-2 tabular-nums">{row.httpStatus ?? '—'}</td>
+                                  <td className="p-2 font-mono">{row.finnhubStatus ?? '—'}</td>
+                                  <td className="p-2 tabular-nums">
+                                    {row.lastClose != null && row.lastClose > 0
+                                      ? Number(row.lastClose).toLocaleString(undefined, {
+                                          maximumFractionDigits: 6,
+                                        })
+                                      : '—'}
+                                  </td>
+                                  <td className="p-2 tabular-nums text-emerald-700 dark:text-emerald-400">
+                                    {row.fallbackClose != null && row.fallbackClose > 0
+                                      ? Number(row.fallbackClose).toLocaleString(undefined, {
+                                          maximumFractionDigits: 6,
+                                        })
+                                      : '—'}
+                                  </td>
+                                  <td className="p-2 text-muted-foreground break-words text-[11px]">
+                                    {[
+                                      row.fallbackSource === 'frankfurter'
+                                        ? locale === 'ar'
+                                          ? 'احتياط ECB'
+                                          : 'ECB fallback'
+                                        : row.fallbackSource === 'yahoo'
+                                          ? locale === 'ar'
+                                            ? 'احتياط Yahoo'
+                                            : 'Yahoo fallback'
+                                          : null,
+                                      row.error,
+                                      row.candleCount && row.lastClose != null && row.lastClose > 0
+                                        ? `${row.candleCount} candles`
+                                        : null,
+                                    ]
+                                      .filter(Boolean)
+                                      .join(' · ') || '—'}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : finnhubTestResult && !finnhubTestResult.success ? (
+                    <p className="text-xs text-destructive">
+                      {finnhubTestResult.error === 'network'
+                        ? locale === 'ar'
+                          ? 'فشل الاتصال'
+                          : 'Network error'
+                        : finnhubTestResult.error}
+                    </p>
+                  ) : null}
+                </div>
+
+                <Button
+                  type="button"
+                  className="w-full sm:w-auto bg-primary"
+                  disabled={savingFinnhub}
+                  onClick={() => void handleSaveFinnhubForex()}
+                >
+                  {savingFinnhub
+                    ? locale === 'ar'
+                      ? 'جاري الحفظ…'
+                      : 'Saving…'
+                    : locale === 'ar'
+                      ? 'حفظ إعدادات Finnhub'
+                      : 'Save Finnhub settings'}
+                </Button>
+              </CardContent>
+            </Card>
+
             <Card className="bg-card/50 border-border backdrop-blur-sm">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -1592,16 +2374,8 @@ export default function AdminPage() {
                     >
                       <div className="flex items-center gap-2">
                         <div className="flex items-center -space-x-1">
-                          <img 
-                            src={`https://flagcdn.com/w40/${forex.flag1}.png`} 
-                            alt={forex.flag1}
-                            className="w-5 h-3.5 object-cover rounded-sm border border-background shadow-sm"
-                          />
-                          <img 
-                            src={`https://flagcdn.com/w40/${forex.flag2}.png`} 
-                            alt={forex.flag2}
-                            className="w-5 h-3.5 object-cover rounded-sm border border-background shadow-sm"
-                          />
+                          <MarketBadge code={forex.flag1} />
+                          <MarketBadge code={forex.flag2} />
                         </div>
                         <span className="font-bold">{forex.pair}</span>
                       </div>
@@ -1658,6 +2432,92 @@ export default function AdminPage() {
 
           {/* Tab 4: Crypto Rates */}
           <TabsContent value="crypto" className="space-y-6">
+            <Card className="border-primary/20 bg-primary/5 backdrop-blur-sm">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Bitcoin className="h-5 w-5 text-primary" />
+                  {locale === 'ar' ? 'بث كريبتو حي من الخادم (CoinGecko)' : 'Server-side live crypto (CoinGecko)'}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <Switch
+                    checked={cryptoLiveForm.enabled}
+                    onCheckedChange={(v) => setCryptoLiveForm((p) => ({ ...p, enabled: v }))}
+                  />
+                  <Label className="text-sm">{locale === 'ar' ? 'تفعيل العرض الحي' : 'Enable live mode'}</Label>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-xs">{locale === 'ar' ? 'العملات المعروضة في الوضع الحي' : 'Codes shown in live mode'}</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {cryptoRates.map((c) => {
+                      const checked = cryptoLiveForm.codes.includes(c.code);
+                      return (
+                        <label key={`cr-live-${c.code}`} className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1 text-xs">
+                          <Checkbox
+                            checked={checked}
+                            onCheckedChange={(v) => {
+                              setCryptoLiveForm((p) => ({
+                                ...p,
+                                codes: v === true
+                                  ? [...new Set([...p.codes, c.code])]
+                                  : p.codes.filter((x) => x !== c.code),
+                              }));
+                            }}
+                          />
+                          <span>{c.code}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" onClick={() => void handleSaveCryptoLive()} disabled={savingCryptoLive}>
+                    {savingCryptoLive ? (locale === 'ar' ? 'جاري الحفظ…' : 'Saving…') : (locale === 'ar' ? 'حفظ إعدادات الكريبتو الحي' : 'Save live crypto settings')}
+                  </Button>
+                  <Button type="button" variant="secondary" onClick={() => void handleCryptoLiveTest()} disabled={cryptoLiveTestLoading}>
+                    {cryptoLiveTestLoading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 me-1 animate-spin" />
+                        {locale === 'ar' ? 'اختبار…' : 'Testing…'}
+                      </>
+                    ) : (
+                      locale === 'ar' ? 'اختبار البيانات' : 'Test data'
+                    )}
+                  </Button>
+                </div>
+
+                {cryptoLiveTestResult?.success ? (
+                  <div className="rounded-md border border-border bg-background/70 p-3 text-xs space-y-2">
+                    <div className="text-muted-foreground">
+                      {locale === 'ar' ? 'الحالة' : 'Status'}: {cryptoLiveTestResult.result?.message}
+                    </div>
+                    {cryptoLiveTestResult.rows && cryptoLiveTestResult.rows.length > 0 ? (
+                      <div className="grid gap-1 sm:grid-cols-2">
+                        {cryptoLiveTestResult.rows.map((r) => (
+                          <div key={`crt-${r.code}`} className="rounded border border-border px-2 py-1 tabular-nums">
+                            <span className="font-medium">{r.code}</span>
+                            {' · '}
+                            {r.ok ? (
+                              <span>
+                                {Number(r.price ?? 0).toLocaleString(undefined, { maximumFractionDigits: 3 })}
+                                {' / '}
+                                {(r.change ?? 0).toFixed(2)}%
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+              </CardContent>
+            </Card>
+
             <Card className="bg-card/50 border-border backdrop-blur-sm">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -1753,12 +2613,12 @@ export default function AdminPage() {
                 <div className="bg-muted/50 rounded-lg p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                   <div>
                     <Label className="text-sm font-medium">
-                      {locale === 'ar' ? 'التحديث التلقائي (جدولة cron)' : 'Auto update (cron)'}
+                      {locale === 'ar' ? 'التحديث التلقائي' : 'Auto update'}
                     </Label>
-                    <p className="text-xs text-muted-foreground mt-1">
+                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
                       {locale === 'ar'
-                        ? 'عند التفعيل، يُنفَّذ الجلب حسب فترة كل فئة على حدة'
-                        : 'When on, each category syncs on its own interval'}
+                        ? 'المؤقّت الداخلي يعمل فقط عند تشغيل الموقع كعملية خادم مستمرة (مثل Docker أو VPS مع `node`/Bun لتشغيل standalone). على استضافة بجلسات قصيرة لن يبقى المؤقّت فعّالاً—جدّول طلباً دورياً إلى `https://نطاقك/api/cron?secret=…` (cron أو curl). يفحص المؤقّت الجدولة كل دقيقة تقريباً (`INTERNAL_CRON_MS`)؛ تنزيل الأسعار يتم حسب «الفترة بالدقائق» لكل فئة أدناه (العملات/الذهب/المحروقات فقط تلقائياً). `DISABLE_INTERNAL_CRON=1` يعطّل الداخلي على الخادم الدائم إن استخدمت cron خارجياً.'
+                        : 'The internal timer only works when the app runs as one long-lived server process (e.g. Docker/VPS with `node` or Bun running the standalone server). On short-lived serverless hosting it will not keep running—schedule `GET https://your-domain/api/cron?secret=…` (cron or curl) every minute. The timer checks the schedule about every minute (`INTERNAL_CRON_MS`); actual fetches follow each category’s «minutes» interval below (only currencies, gold, fuel in auto mode). Use `DISABLE_INTERNAL_CRON=1` on a persistent host if you rely on an external cron instead.'}
                     </p>
                   </div>
                   <Switch
@@ -1768,7 +2628,7 @@ export default function AdminPage() {
                 </div>
 
                 <div className="space-y-3">
-                  {SYNC_CATEGORY_IDS.map((id, syncIndex) => {
+                  {SYNC_TAB_CATEGORY_IDS.map((id, syncIndex) => {
                     const cat = resolvedSyncConfig().categories[id];
                     const label = SYNC_CATEGORY_LABEL[id];
                     const last = resolvedSyncConfig().lastFetchedAt[id];
@@ -1925,9 +2785,9 @@ export default function AdminPage() {
                 </div>
 
                 <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3 text-sm text-blue-600 dark:text-blue-400">
-                  {locale === 'ar'
-                    ? 'الرقم الثابت: يُخصم أو يُضاف لكل من سعرَي الشراء والبيع (العملات)، أو لسعر الذهب/العملات الرقمية بالدولار، أو لسعر المحروقات بالليرة. النسبة: تُطبَّق على القيمة كاملة. البورصات العالمية: Frankfurter (ECB) عند التوفّر، وإلا من أسعار الليرة بعد جلب العملات.'
-                    : 'Fixed: buy/sell (currencies), gold/crypto in USD, or fuel in SYP. Percent: full value. Global FX: Frankfurter (ECB) when available; else cross-rates from SYP after currencies sync.'}
+                    {locale === 'ar'
+                    ? 'الرقم الثابت: يُخصم أو يُضاف لسعري شراء/بيع العملات، أو لسعر الذهب بالدولار، أو للمحروقات بالليرة. النسبة: على القيمة كاملة. تحديث الفوركس والعملات الرقمية من تبويباتها في لوحة التحكم وليس من المزامنة التلقائية هنا.'
+                    : 'Fixed: buy/sell (currencies), gold in USD, or fuel in SYP. Percent: full value. Forex and crypto are updated from their admin tabs, not from this auto-sync tab.'}
                 </div>
               </CardContent>
             </Card>
@@ -2303,6 +3163,17 @@ export default function AdminPage() {
                         }
                       />
                     </div>
+                    <div className="space-y-2 sm:col-span-2">
+                      <Label className="text-xs">TikTok</Label>
+                      <Input
+                        dir="ltr"
+                        placeholder="https://www.tiktok.com/@..."
+                        value={siteIdentity.footerSocialTiktok}
+                        onChange={(e) =>
+                          setSiteIdentity({ ...siteIdentity, footerSocialTiktok: e.target.value })
+                        }
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -2612,6 +3483,133 @@ export default function AdminPage() {
               )}
               {locale === 'ar' ? 'حفظ الهوية البصرية' : 'Save Visual Identity'}
             </Button>
+          </TabsContent>
+
+          <TabsContent value="adsense" className="space-y-6">
+            <Card className="border-border bg-card/50 backdrop-blur-sm">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Megaphone className="h-5 w-5 text-primary" />
+                  {locale === 'ar' ? 'جوجل AdSense والتحقق من الموقع' : 'Google AdSense & site verification'}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <p className="text-sm text-muted-foreground">
+                  {locale === 'ar'
+                    ? 'أدخل القيم كما يعطيك AdSense وSearch Console. التحقق من الملكية يعمل حتى مع تعطيل الإعلانات. مسار الملف العلني: /ads.txt'
+                    : 'Enter values from AdSense / Search Console. Site verification works even when ads are off. Public file: /ads.txt'}
+                </p>
+
+                <div className="flex items-center justify-between gap-4 rounded-lg border border-border/80 p-4">
+                  <div>
+                    <p className="font-medium">
+                      {locale === 'ar' ? 'تفعيل سكربت الإعلانات' : 'Enable AdSense script'}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {locale === 'ar'
+                        ? 'يحمّل adsbygoogle.js فقط عند التفعيل ووجود معرّف الناشر الصحيح.'
+                        : 'Loads adsbygoogle.js only when enabled with a valid publisher ID.'}
+                    </p>
+                  </div>
+                  <Switch
+                    checked={adsenseForm.enabled}
+                    onCheckedChange={(v) => setAdsenseForm((p) => ({ ...p, enabled: v }))}
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="adsense-pub">{locale === 'ar' ? 'معرّف الناشر (ca-pub-…)' : 'Publisher ID (ca-pub-…)'}</Label>
+                  <Input
+                    id="adsense-pub"
+                    dir="ltr"
+                    className="mt-1 font-mono text-sm"
+                    placeholder="ca-pub-xxxxxxxxxxxxxxxx"
+                    value={adsenseForm.publisherId}
+                    onChange={(e) => setAdsenseForm((p) => ({ ...p, publisherId: e.target.value }))}
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="adsense-verify">
+                    {locale === 'ar' ? 'التحقق من الموقع (قيمة content فقط)' : 'Site verification (meta content only)'}
+                  </Label>
+                  <Input
+                    id="adsense-verify"
+                    dir="ltr"
+                    className="mt-1 font-mono text-sm"
+                    placeholder={locale === 'ar' ? 'أو الصق وسم الميتا كاملاً' : 'Or paste full meta tag'}
+                    value={adsenseForm.siteVerification}
+                    onChange={(e) => setAdsenseForm((p) => ({ ...p, siteVerification: e.target.value }))}
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {locale === 'ar'
+                      ? 'يُضاف كوسم meta في الصفحة لإثبات الملكية (Google / AdSense).'
+                      : 'Adds a meta tag for ownership verification.'}
+                  </p>
+                </div>
+
+                <div>
+                  <Label htmlFor="adsense-adstxt">{locale === 'ar' ? 'محتوى ads.txt' : 'ads.txt content'}</Label>
+                  <Textarea
+                    id="adsense-adstxt"
+                    dir="ltr"
+                    className="mt-1 min-h-[120px] font-mono text-xs"
+                    placeholder="google.com, pub-xxxxxxxxxxxxxxxx, DIRECT, f08c47fec0942fa0"
+                    value={adsenseForm.adsTxtRaw}
+                    onChange={(e) => setAdsenseForm((p) => ({ ...p, adsTxtRaw: e.target.value }))}
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {locale === 'ar'
+                      ? 'إن تركت الحقل فارغاً وكان معرّف الناشر صحيحاً، يُولَّد سطر Google تلقائياً.'
+                      : 'If empty and publisher ID is set, a default Google line is generated.'}
+                  </p>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <Label htmlFor="adsense-slot-hero">{locale === 'ar' ? 'وحدة أسفل الهيرو (data-ad-slot)' : 'Below-hero unit (data-ad-slot)'}</Label>
+                    <Input
+                      id="adsense-slot-hero"
+                      dir="ltr"
+                      inputMode="numeric"
+                      className="mt-1 font-mono text-sm"
+                      placeholder="1234567890"
+                      value={adsenseForm.slotHero}
+                      onChange={(e) => setAdsenseForm((p) => ({ ...p, slotHero: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="adsense-slot-mid">
+                      {locale === 'ar' ? 'وحدة بين الأقسام (قبل نص SEO)' : 'Mid-page unit (before SEO block)'}
+                    </Label>
+                    <Input
+                      id="adsense-slot-mid"
+                      dir="ltr"
+                      inputMode="numeric"
+                      className="mt-1 font-mono text-sm"
+                      placeholder="1234567890"
+                      value={adsenseForm.slotContent}
+                      onChange={(e) => setAdsenseForm((p) => ({ ...p, slotContent: e.target.value }))}
+                    />
+                  </div>
+                </div>
+
+                <p className="text-xs text-muted-foreground">
+                  {locale === 'ar'
+                    ? 'يُفضّل عدم زيادة عدد الوحدات عن وحدتين في الصفحة الرئيسية، مع تسمية «إعلان» كما هو معروض. قبول AdSense يعتمد على المحتوى وسياسة الخصوصية وليس على الإعدادات التقنية وحدها.'
+                    : 'Keeping two labeled ad units on the home page aligns with common policy practice. Approval depends on content and privacy policy, not settings alone.'}
+                </p>
+
+                <Button type="button" onClick={() => void handleSaveAdsense()} disabled={savingAdsense} className="w-full">
+                  {savingAdsense ? (
+                    <RefreshCw className="ml-1 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Check className="ml-1 h-4 w-4" />
+                  )}
+                  {locale === 'ar' ? 'حفظ إعدادات AdSense' : 'Save AdSense settings'}
+                </Button>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           <TabsContent value="api" className="space-y-6">
