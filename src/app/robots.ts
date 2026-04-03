@@ -1,8 +1,10 @@
 import type { MetadataRoute } from 'next';
-import { getSiteBaseUrl } from '@/lib/site-base-url';
+import { resolvePublicSiteUrl } from '@/lib/site-base-url';
 
-export default function robots(): MetadataRoute.Robots {
-  const base = getSiteBaseUrl();
+export const dynamic = 'force-dynamic';
+
+export default async function robots(): Promise<MetadataRoute.Robots> {
+  const base = await resolvePublicSiteUrl();
   return {
     rules: [
       { userAgent: 'Googlebot', allow: '/' },
