@@ -47,9 +47,18 @@ model ExchangeRate {
 model GoldPrice {
   id           String   @id @default(cuid())
   priceUsd     Float    // سعر الأونصة بالدولار
-  pricePerGram Float    // سعر الغرام بالدولار
+  pricePerGram Float    // سعر غرام 24K بالدولار (من SP Today — قسم International)
+  /// غرام 21K بالدولار (sp-today.com/en/gold)
+  pricePerGram21 Float?
+  /// غرام 18K بالدولار
+  pricePerGram18 Float?
+  /// غرام 14K بالدولار
+  pricePerGram14 Float?
   prevPriceUsd     Float?
   prevPricePerGram Float?
+  prevPricePerGram21 Float?
+  prevPricePerGram18 Float?
+  prevPricePerGram14 Float?
   prevCapturedAt   DateTime?
   lastUpdated  DateTime @default(now())
   createdAt    DateTime @default(now())
@@ -176,6 +185,13 @@ model SiteSettings {
   adsenseSlotHero          String?
   /// data-ad-slot لوحدة بين الأقسام (قبل كتلة SEO)
   adsenseSlotContent       String?
+
+  /// ملف HTML لتحقق Search Console (مثل google123.html) — الاسم فقط بصيغة آمنة
+  gscHtmlVerificationFileName String?
+  /// محتوى الملف الذي يطلبه Google (سطر أو HTML بسيط)
+  gscHtmlVerificationFileBody  String?
+  /// وسم meta إضافي لـ google-site-verification (قيمة content) إن احتجت أكثر من واحد
+  gscExtraSiteVerificationMeta String?
 }
 
 enum ApiAccessRequestStatus {

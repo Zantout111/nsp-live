@@ -14,6 +14,7 @@ import {
   upsertExchangeRateWithSnapshot,
   updateLatestGoldWithSnapshot,
   updateFuelPriceWithSnapshot,
+  type GoldSnapshotUpdate,
 } from '@/lib/rate-snapshot';
 
 const SP = {
@@ -117,7 +118,28 @@ function smoothTowardTarget(prev: number | null, target: number): number {
   return Math.max(0, prev + signedStep * softness);
 }
 
-export function extractGoldUsd(html: string): { priceUsd: number; pricePerGram: number } | null {
+/** سعر الغرام بالدولار من قسم International Prices على sp-today.com/en/gold */
+function extractKaratUsdPerGram(html: string, karatLabel: string): number | null {
+  const esc = karatLabel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp(
+    `<h3 class="text-lg font-bold text-amber-500 mb-1">${esc}<\\/h3><p class="font-mono font-bold">\\$<!-- -->([\\d,.]+)<\\/p>`
+  );
+  const m = html.match(re);
+  if (!m) return null;
+  const n = parseFloat(m[1].replace(/,/g, ''));
+  if (isNaN(n) || n <= 0) return null;
+  return n;
+}
+
+export type SpTodayGoldUsdParsed = {
+  priceUsd: number;
+  pricePerGram: number;
+  pricePerGram21?: number;
+  pricePerGram18?: number;
+  pricePerGram14?: number;
+};
+
+export function extractGoldUsd(html: string): SpTodayGoldUsdParsed | null {
   const ounce = html.match(
     /<h3 class="text-lg font-bold mb-1">Ounce<\/h3><p class="font-mono font-bold">\$<!-- -->([\d,]+)<\/p>/
   );
@@ -128,7 +150,14 @@ export function extractGoldUsd(html: string): { priceUsd: number; pricePerGram: 
   const priceUsd = parseFloat(ounce[1].replace(/,/g, ''));
   const pricePerGram = parseFloat(g24[1].replace(/,/g, ''));
   if (isNaN(priceUsd) || isNaN(pricePerGram) || priceUsd <= 0 || pricePerGram <= 0) return null;
-  return { priceUsd, pricePerGram };
+  const out: SpTodayGoldUsdParsed = { priceUsd, pricePerGram };
+  const k21 = extractKaratUsdPerGram(html, '21K');
+  const k18 = extractKaratUsdPerGram(html, '18K');
+  const k14 = extractKaratUsdPerGram(html, '14K');
+  if (k21 != null) out.pricePerGram21 = k21;
+  if (k18 != null) out.pricePerGram18 = k18;
+  if (k14 != null) out.pricePerGram14 = k14;
+  return out;
 }
 
 /** بنزين / ديزل / غاز مسال من صفحة الطاقة */
@@ -258,8 +287,19 @@ export async function executeSpTodaySync(options: {
       } else {
         const priceUsd = applyAdjustmentToNumber(raw.priceUsd, c);
         const pricePerGram = applyAdjustmentToNumber(raw.pricePerGram, c);
-        await updateLatestGoldWithSnapshot(db, { priceUsd, pricePerGram });
-        mark('gold', { ok: true, updated: 1, message: 'Gold OK' });
+        const payload: GoldSnapshotUpdate = { priceUsd, pricePerGram };
+        if (raw.pricePerGram21 != null) {
+          payload.pricePerGram21 = applyAdjustmentToNumber(raw.pricePerGram21, c);
+        }
+        if (raw.pricePerGram18 != null) {
+          payload.pricePerGram18 = applyAdjustmentToNumber(raw.pricePerGram18, c);
+        }
+        if (raw.pricePerGram14 != null) {
+          payload.pricePerGram14 = applyAdjustmentToNumber(raw.pricePerGram14, c);
+        }
+        await updateLatestGoldWithSnapshot(db, payload);
+        const kN = [raw.pricePerGram21, raw.pricePerGram18, raw.pricePerGram14].filter((x) => x != null).length;
+        mark('gold', { ok: true, updated: 1, message: kN >= 3 ? 'Gold + 21/18/14K' : 'Gold OK' });
       }
     } catch (e) {
       mark('gold', { ok: false, message: String(e) });

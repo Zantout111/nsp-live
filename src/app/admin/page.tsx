@@ -22,6 +22,7 @@ import { resolveLogoUrlForClient } from '@/lib/resolve-logo-url';
 import type { SyncCategoryId, SyncConfigV1, CategorySyncConfig } from '@/lib/sync-config';
 import { SYNC_CATEGORY_IDS, defaultSyncConfigV1 } from '@/lib/sync-config';
 import { DEFAULT_MARKET_SYMBOL_ROWS } from '@/lib/finnhub-types';
+import { cn } from '@/lib/utils';
 import { 
   RefreshCw, 
   Coins, 
@@ -52,6 +53,10 @@ import {
   FlaskConical,
   Bitcoin,
   Megaphone,
+  PanelLeft,
+  PanelRight,
+  Copy,
+  FileSearch,
 } from 'lucide-react';
 
 interface CurrencyRate {
@@ -69,6 +74,9 @@ interface CurrencyRate {
 interface GoldPriceData {
   priceUsd: number;
   pricePerGram: number;
+  pricePerGram21?: number | null;
+  pricePerGram18?: number | null;
+  pricePerGram14?: number | null;
   lastUpdated: string;
 }
 
@@ -93,8 +101,8 @@ const SYNC_CATEGORY_LABEL: Record<SyncCategoryId, { ar: string; en: string; hint
   gold: {
     ar: 'الذهب',
     en: 'Gold',
-    hintAr: 'أونصة وغرام 24 قيراط بالدولار',
-    hintEn: 'Ounce & 24K gram in USD',
+    hintAr: 'أونصة و24K و21K و18K و14K بالدولار من صفحة الذهب',
+    hintEn: 'Ounce, 24K & 21/18/14K USD/gram from gold page',
   },
   fuel: {
     ar: 'المحروقات',
@@ -120,11 +128,17 @@ const FINNHUB_SYMBOL_DEFAULTS = DEFAULT_MARKET_SYMBOL_ROWS;
 
 const MARKET_ASSET_EMOJI: Record<string, string> = {
   'asset-gold': '🥇',
+  'asset-silver': '🥈',
   'asset-oil': '🛢️',
   'asset-gas': '🔥',
   'asset-sugar': '🍬',
   'asset-rice': '🌾',
 };
+
+function adminForexPairTitle(fx: ForexRateData, loc: string): string {
+  if (loc === 'ar') return String(fx.nameAr ?? '').trim() || fx.pair;
+  return String(fx.nameEn ?? '').trim() || fx.pair;
+}
 
 function MarketBadge({ code }: { code: string }) {
   const c = String(code || '').toLowerCase();
@@ -288,7 +302,13 @@ export default function AdminPage() {
   const [rates, setRates] = useState<CurrencyRate[]>([]);
   const [goldPrice, setGoldPrice] = useState<GoldPriceData | null>(null);
   const [editingRates, setEditingRates] = useState<Record<string, { buyRate: string; sellRate: string }>>({});
-  const [goldInput, setGoldInput] = useState({ priceUsd: '', pricePerGram: '' });
+  const [goldInput, setGoldInput] = useState({
+    priceUsd: '',
+    pricePerGram: '',
+    pricePerGram21: '',
+    pricePerGram18: '',
+    pricePerGram14: '',
+  });
   const [refreshing, setRefreshing] = useState(false);
   
   // Sync Settings
@@ -366,12 +386,21 @@ export default function AdminPage() {
   const [adsenseForm, setAdsenseForm] = useState({
     enabled: false,
     publisherId: '',
-    siteVerification: '',
     adsTxtRaw: '',
     slotHero: '',
     slotContent: '',
   });
   const [savingAdsense, setSavingAdsense] = useState(false);
+
+  const [searchConsoleForm, setSearchConsoleForm] = useState({
+    siteVerificationMeta: '',
+    htmlFileName: '',
+    htmlFileBody: '',
+    extraMeta: '',
+  });
+  const [savingSearchConsole, setSavingSearchConsole] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [publicOrigin, setPublicOrigin] = useState('');
 
   const [apiAccessLoading, setApiAccessLoading] = useState(false);
   const [apiRequests, setApiRequests] = useState<ApiAccessRequestRow[]>([]);
@@ -406,6 +435,18 @@ export default function AdminPage() {
   useEffect(() => {
     checkAuth();
   }, [checkAuth]);
+
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem('adminSidebarCollapsed');
+      if (v === '1') setSidebarCollapsed(true);
+    } catch {
+      /* ignore */
+    }
+    if (typeof window !== 'undefined') {
+      setPublicOrigin(window.location.origin);
+    }
+  }, []);
 
   useEffect(() => {
     if (activeTab !== 'api' || !isAuthenticated) return;
@@ -509,10 +550,15 @@ export default function AdminPage() {
         setAdsenseForm({
           enabled: Boolean(result.settings.adsenseEnabled),
           publisherId: result.settings.adsensePublisherId ?? '',
-          siteVerification: result.settings.adsenseSiteVerification ?? '',
           adsTxtRaw: result.settings.adsTxtRaw ?? '',
           slotHero: result.settings.adsenseSlotHero ?? '',
           slotContent: result.settings.adsenseSlotContent ?? '',
+        });
+        setSearchConsoleForm({
+          siteVerificationMeta: result.settings.adsenseSiteVerification ?? '',
+          htmlFileName: result.settings.gscHtmlVerificationFileName ?? '',
+          htmlFileBody: result.settings.gscHtmlVerificationFileBody ?? '',
+          extraMeta: result.settings.gscExtraSiteVerificationMeta ?? '',
         });
         const visRaw = result.settings.fuelVisibilityMap;
         const next: FuelVisibilityMap = {};
@@ -548,9 +594,16 @@ export default function AdminPage() {
         setEditingRates(editRates);
         
         if (result.data.goldPrice) {
+          const gp = result.data.goldPrice;
           setGoldInput({
-            priceUsd: result.data.goldPrice.priceUsd.toString(),
-            pricePerGram: result.data.goldPrice.pricePerGram.toString()
+            priceUsd: gp.priceUsd.toString(),
+            pricePerGram: gp.pricePerGram.toString(),
+            pricePerGram21:
+              gp.pricePerGram21 != null && gp.pricePerGram21 > 0 ? String(gp.pricePerGram21) : '',
+            pricePerGram18:
+              gp.pricePerGram18 != null && gp.pricePerGram18 > 0 ? String(gp.pricePerGram18) : '',
+            pricePerGram14:
+              gp.pricePerGram14 != null && gp.pricePerGram14 > 0 ? String(gp.pricePerGram14) : '',
           });
         }
       }
@@ -837,10 +890,17 @@ export default function AdminPage() {
 
   const handleUpdateGold = async () => {
     try {
+      const body: Record<string, string> = {
+        priceUsd: goldInput.priceUsd,
+        pricePerGram: goldInput.pricePerGram,
+      };
+      if (goldInput.pricePerGram21.trim() !== '') body.pricePerGram21 = goldInput.pricePerGram21;
+      if (goldInput.pricePerGram18.trim() !== '') body.pricePerGram18 = goldInput.pricePerGram18;
+      if (goldInput.pricePerGram14.trim() !== '') body.pricePerGram14 = goldInput.pricePerGram14;
       const response = await fetch('/api/admin/rates', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(goldInput)
+        body: JSON.stringify(body),
       });
 
       const result = await response.json();
@@ -1064,7 +1124,6 @@ export default function AdminPage() {
         body: JSON.stringify({
           adsenseEnabled: adsenseForm.enabled,
           adsensePublisherId: adsenseForm.publisherId.trim() || null,
-          adsenseSiteVerification: adsenseForm.siteVerification.trim() || null,
           adsTxtRaw: adsenseForm.adsTxtRaw.trim() || null,
           adsenseSlotHero: adsenseForm.slotHero.trim() || null,
           adsenseSlotContent: adsenseForm.slotContent.trim() || null,
@@ -1082,8 +1141,8 @@ export default function AdminPage() {
         title: locale === 'ar' ? 'تم الحفظ' : 'Saved',
         description:
           locale === 'ar'
-            ? 'تم حفظ إعدادات AdSense وملف ads.txt والتحقق من الموقع.'
-            : 'AdSense, ads.txt, and site verification settings saved.',
+            ? 'تم حفظ إعدادات AdSense وملف ads.txt.'
+            : 'AdSense and ads.txt settings saved.',
       });
       await loadSettings();
     } catch {
@@ -1094,6 +1153,62 @@ export default function AdminPage() {
       });
     } finally {
       setSavingAdsense(false);
+    }
+  };
+
+  const copyPublicUrl = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast({
+        title: locale === 'ar' ? 'تم النسخ' : 'Copied',
+        description: text,
+      });
+    } catch {
+      toast({
+        title: locale === 'ar' ? 'تعذر النسخ' : 'Copy failed',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleSaveSearchConsole = async () => {
+    setSavingSearchConsole(true);
+    try {
+      const response = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          adsenseSiteVerification: searchConsoleForm.siteVerificationMeta.trim() || null,
+          gscHtmlVerificationFileName: searchConsoleForm.htmlFileName.trim() || null,
+          gscHtmlVerificationFileBody: searchConsoleForm.htmlFileBody.trim() || null,
+          gscExtraSiteVerificationMeta: searchConsoleForm.extraMeta.trim() || null,
+        }),
+      });
+      const result = (await response.json().catch(() => ({}))) as { success?: boolean };
+      if (!response.ok || !result.success) {
+        toast({
+          title: locale === 'ar' ? 'فشل الحفظ' : 'Save failed',
+          variant: 'destructive',
+        });
+        return;
+      }
+      toast({
+        title: locale === 'ar' ? 'تم الحفظ' : 'Saved',
+        description:
+          locale === 'ar'
+            ? 'تم حفظ إعدادات Google / Search Console.'
+            : 'Google / Search Console settings saved.',
+      });
+      await loadSettings();
+    } catch {
+      toast({
+        title: locale === 'ar' ? 'خطأ' : 'Error',
+        description: locale === 'ar' ? 'فشل الاتصال' : 'Request failed',
+        variant: 'destructive',
+      });
+    } finally {
+      setSavingSearchConsole(false);
     }
   };
 
@@ -1557,6 +1672,10 @@ export default function AdminPage() {
   };
 
   const isRtl = locale === 'ar';
+  const adminSidebarTriggerClass = cn(
+    'flex h-9 flex-none items-center justify-center gap-2 rounded-md border border-transparent px-2 py-2 text-sm font-medium transition-colors data-[state=active]:border-border/80 data-[state=active]:bg-background data-[state=active]:shadow-sm sm:flex-1 sm:justify-center lg:h-auto lg:min-h-10 lg:w-full lg:flex-none lg:py-2.5',
+    sidebarCollapsed ? 'lg:justify-center lg:px-1' : 'lg:justify-start'
+  );
 
   if (isLoading) {
     return (
@@ -1712,47 +1831,115 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* Tabs */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="mb-6 flex w-full flex-wrap gap-1">
-            <TabsTrigger value="rates" className="flex items-center gap-1">
-              <Coins className="w-4 h-4" />
-              <span className="hidden lg:inline">{locale === 'ar' ? 'الصرف' : 'Rates'}</span>
-            </TabsTrigger>
-            <TabsTrigger value="fuel" className="flex items-center gap-1">
-              <Fuel className="w-4 h-4" />
-              <span className="hidden lg:inline">{locale === 'ar' ? 'المحروقات' : 'Fuel'}</span>
-            </TabsTrigger>
-            <TabsTrigger value="forex" className="flex items-center gap-1">
-              <DollarSign className="w-4 h-4" />
-              <span className="hidden lg:inline">{locale === 'ar' ? 'البورصات العالمية' : 'Global markets'}</span>
-            </TabsTrigger>
-            <TabsTrigger value="crypto" className="flex items-center gap-1">
-              <span className="text-sm">₿</span>
-              <span className="hidden lg:inline">{locale === 'ar' ? 'العملات الرقمية' : 'Cryptocurrencies'}</span>
-            </TabsTrigger>
-            <TabsTrigger value="sync" className="flex items-center gap-1">
-              <Download className="w-4 h-4" />
-              <span className="hidden lg:inline">{locale === 'ar' ? 'مزامنة' : 'Sync'}</span>
-            </TabsTrigger>
-            <TabsTrigger value="identity" className="flex items-center gap-1">
-              <Globe className="w-4 h-4" />
-              <span className="hidden lg:inline">{locale === 'ar' ? 'الهوية' : 'Identity'}</span>
-            </TabsTrigger>
-            <TabsTrigger value="visual" className="flex items-center gap-1">
-              <Palette className="w-4 h-4" />
-              <span className="hidden lg:inline">{locale === 'ar' ? 'الألوان' : 'Colors'}</span>
-            </TabsTrigger>
-            <TabsTrigger value="adsense" className="flex items-center gap-1">
-              <Megaphone className="w-4 h-4" />
-              <span className="hidden lg:inline">AdSense</span>
-            </TabsTrigger>
-            <TabsTrigger value="api" className="flex items-center gap-1">
-              <Code className="w-4 h-4" />
-              <span className="hidden lg:inline">API</span>
-            </TabsTrigger>
-          </TabsList>
+        {/* Tabs — شريط جانبي على الشاشات الواسعة */}
+        <Tabs
+          value={activeTab}
+          onValueChange={setActiveTab}
+          className="flex w-full flex-col gap-4 lg:flex-row lg:items-start lg:gap-6"
+        >
+          <div
+            className={cn(
+              'flex w-full shrink-0 flex-col gap-2 rounded-xl border border-border/50 bg-muted/30 p-1 sm:p-2 lg:sticky lg:top-24 lg:z-10 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto lg:border-border/60 lg:bg-card/50 lg:p-2 lg:shadow-sm',
+              sidebarCollapsed ? 'lg:w-[4.25rem]' : 'lg:w-60'
+            )}
+          >
+            <div className="hidden items-center justify-between gap-1 lg:flex lg:shrink-0">
+              <span
+                className={cn(
+                  'truncate text-xs font-semibold uppercase tracking-wide text-muted-foreground',
+                  sidebarCollapsed && 'sr-only'
+                )}
+              >
+                {locale === 'ar' ? 'القائمة' : 'Menu'}
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 shrink-0"
+                onClick={() => {
+                  setSidebarCollapsed((c) => {
+                    const n = !c;
+                    try {
+                      localStorage.setItem('adminSidebarCollapsed', n ? '1' : '0');
+                    } catch {
+                      /* ignore */
+                    }
+                    return n;
+                  });
+                }}
+                aria-label={locale === 'ar' ? 'طي القائمة' : 'Toggle sidebar'}
+              >
+                {sidebarCollapsed ? (
+                  <PanelRight className="h-4 w-4" />
+                ) : (
+                  <PanelLeft className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
+            <TabsList className="no-scrollbar mb-0 flex h-auto min-h-0 w-full flex-wrap items-stretch justify-start gap-1 overflow-x-auto rounded-lg bg-muted/40 p-1 sm:bg-muted/50 lg:flex-col lg:flex-nowrap lg:overflow-y-visible lg:overflow-x-visible lg:bg-transparent lg:p-0">
+              <TabsTrigger value="rates" className={adminSidebarTriggerClass}>
+                <Coins className="h-4 w-4 shrink-0" />
+                <span className={cn('hidden sm:inline', sidebarCollapsed && 'lg:hidden')}>
+                  {locale === 'ar' ? 'الصرف' : 'Rates'}
+                </span>
+              </TabsTrigger>
+              <TabsTrigger value="fuel" className={adminSidebarTriggerClass}>
+                <Fuel className="h-4 w-4 shrink-0" />
+                <span className={cn('hidden sm:inline', sidebarCollapsed && 'lg:hidden')}>
+                  {locale === 'ar' ? 'المحروقات' : 'Fuel'}
+                </span>
+              </TabsTrigger>
+              <TabsTrigger value="forex" className={adminSidebarTriggerClass}>
+                <DollarSign className="h-4 w-4 shrink-0" />
+                <span className={cn('hidden sm:inline', sidebarCollapsed && 'lg:hidden')}>
+                  {locale === 'ar' ? 'البورصات العالمية' : 'Global markets'}
+                </span>
+              </TabsTrigger>
+              <TabsTrigger value="crypto" className={adminSidebarTriggerClass}>
+                <span className="shrink-0 text-sm">₿</span>
+                <span className={cn('hidden sm:inline', sidebarCollapsed && 'lg:hidden')}>
+                  {locale === 'ar' ? 'العملات الرقمية' : 'Crypto'}
+                </span>
+              </TabsTrigger>
+              <TabsTrigger value="sync" className={adminSidebarTriggerClass}>
+                <Download className="h-4 w-4 shrink-0" />
+                <span className={cn('hidden sm:inline', sidebarCollapsed && 'lg:hidden')}>
+                  {locale === 'ar' ? 'مزامنة' : 'Sync'}
+                </span>
+              </TabsTrigger>
+              <TabsTrigger value="identity" className={adminSidebarTriggerClass}>
+                <Globe className="h-4 w-4 shrink-0" />
+                <span className={cn('hidden sm:inline', sidebarCollapsed && 'lg:hidden')}>
+                  {locale === 'ar' ? 'الهوية' : 'Identity'}
+                </span>
+              </TabsTrigger>
+              <TabsTrigger value="visual" className={adminSidebarTriggerClass}>
+                <Palette className="h-4 w-4 shrink-0" />
+                <span className={cn('hidden sm:inline', sidebarCollapsed && 'lg:hidden')}>
+                  {locale === 'ar' ? 'الألوان' : 'Colors'}
+                </span>
+              </TabsTrigger>
+              <TabsTrigger value="searchConsole" className={adminSidebarTriggerClass}>
+                <FileSearch className="h-4 w-4 shrink-0" />
+                <span className={cn('hidden sm:inline', sidebarCollapsed && 'lg:hidden')}>
+                  {locale === 'ar' ? 'Search Console' : 'Search Console'}
+                </span>
+              </TabsTrigger>
+              <TabsTrigger value="adsense" className={adminSidebarTriggerClass}>
+                <Megaphone className="h-4 w-4 shrink-0" />
+                <span className={cn('hidden sm:inline', sidebarCollapsed && 'lg:hidden')}>
+                  AdSense
+                </span>
+              </TabsTrigger>
+              <TabsTrigger value="api" className={adminSidebarTriggerClass}>
+                <Code className="h-4 w-4 shrink-0" />
+                <span className={cn('hidden sm:inline', sidebarCollapsed && 'lg:hidden')}>API</span>
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
+          <div className="min-w-0 flex-1">
           {/* Tab 1: Exchange Rates */}
           <TabsContent value="rates" className="space-y-6">
             <div className="grid gap-6 lg:grid-cols-2">
@@ -1797,7 +1984,7 @@ export default function AdminPage() {
                         type="number"
                         step="0.01"
                         value={goldInput.priceUsd}
-                        onChange={(e) => setGoldInput({...goldInput, priceUsd: e.target.value})}
+                        onChange={(e) => setGoldInput({ ...goldInput, priceUsd: e.target.value })}
                         className="mt-1"
                       />
                     </div>
@@ -1807,8 +1994,48 @@ export default function AdminPage() {
                         type="number"
                         step="0.01"
                         value={goldInput.pricePerGram}
-                        onChange={(e) => setGoldInput({...goldInput, pricePerGram: e.target.value})}
+                        onChange={(e) => setGoldInput({ ...goldInput, pricePerGram: e.target.value })}
                         className="mt-1"
+                      />
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground text-center">
+                    {locale === 'ar'
+                      ? 'عيار 21 / 18 / 14 — غرام بالدولار (اختياري؛ تُحدَّث تلقائياً من المزامنة مع SP Today)'
+                      : '21K / 18K / 14K — USD per gram (optional; filled by SP Today sync)'}
+                  </p>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <Label>21K $/g</Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={goldInput.pricePerGram21}
+                        onChange={(e) => setGoldInput({ ...goldInput, pricePerGram21: e.target.value })}
+                        className="mt-1"
+                        placeholder="—"
+                      />
+                    </div>
+                    <div>
+                      <Label>18K $/g</Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={goldInput.pricePerGram18}
+                        onChange={(e) => setGoldInput({ ...goldInput, pricePerGram18: e.target.value })}
+                        className="mt-1"
+                        placeholder="—"
+                      />
+                    </div>
+                    <div>
+                      <Label>14K $/g</Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={goldInput.pricePerGram14}
+                        onChange={(e) => setGoldInput({ ...goldInput, pricePerGram14: e.target.value })}
+                        className="mt-1"
+                        placeholder="—"
                       />
                     </div>
                   </div>
@@ -2377,7 +2604,14 @@ export default function AdminPage() {
                           <MarketBadge code={forex.flag1} />
                           <MarketBadge code={forex.flag2} />
                         </div>
-                        <span className="font-bold">{forex.pair}</span>
+                        <div className="min-w-0">
+                          <span className="block font-bold leading-snug">
+                            {adminForexPairTitle(forex, locale)}
+                          </span>
+                          <span className="block font-mono text-[11px] text-muted-foreground">
+                            {forex.pair}
+                          </span>
+                        </div>
                       </div>
                       
                       <div className="grid grid-cols-2 gap-2">
@@ -3485,19 +3719,192 @@ export default function AdminPage() {
             </Button>
           </TabsContent>
 
-          <TabsContent value="adsense" className="space-y-6">
+          <TabsContent value="searchConsole" className="space-y-6">
             <Card className="border-border bg-card/50 backdrop-blur-sm">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Megaphone className="h-5 w-5 text-primary" />
-                  {locale === 'ar' ? 'جوجل AdSense والتحقق من الموقع' : 'Google AdSense & site verification'}
+                  <FileSearch className="h-5 w-5 text-primary" />
+                  {locale === 'ar' ? 'Google Search Console والملفات العلنية' : 'Google Search Console & public files'}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
                 <p className="text-sm text-muted-foreground">
                   {locale === 'ar'
-                    ? 'أدخل القيم كما يعطيك AdSense وSearch Console. التحقق من الملكية يعمل حتى مع تعطيل الإعلانات. مسار الملف العلني: /ads.txt'
-                    : 'Enter values from AdSense / Search Console. Site verification works even when ads are off. Public file: /ads.txt'}
+                    ? 'روابط الجذر تُبنى من عنوان المتصفح الحالي. للإنتاج يُفضّل ضبط NEXT_PUBLIC_SITE_URL في الخادم ليطابق النطاق العلني تماماً.'
+                    : 'URLs use your current browser origin. In production set NEXT_PUBLIC_SITE_URL to your canonical domain.'}
+                </p>
+
+                <div className="space-y-3 rounded-lg border border-border/80 bg-muted/20 p-4">
+                  <p className="text-sm font-medium">
+                    {locale === 'ar' ? 'روابط جاهزة للنسخ' : 'Copy-ready URLs'}
+                  </p>
+                  {(
+                    [
+                      { key: 'sitemap', label: 'sitemap.xml', path: '/sitemap.xml' },
+                      { key: 'robots', label: 'robots.txt', path: '/robots.txt' },
+                      { key: 'ads', label: 'ads.txt', path: '/ads.txt' },
+                    ] as const
+                  ).map((row) => {
+                    const full = publicOrigin ? `${publicOrigin}${row.path}` : `…${row.path}`;
+                    return (
+                      <div key={row.key} className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                        <span className="w-28 shrink-0 text-xs font-mono text-muted-foreground">
+                          {row.label}
+                        </span>
+                        <Input readOnly dir="ltr" value={full} className="font-mono text-xs" />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="shrink-0"
+                          disabled={!publicOrigin}
+                          onClick={() => void copyPublicUrl(`${publicOrigin}${row.path}`)}
+                        >
+                          <Copy className="me-1 h-3.5 w-3.5" />
+                          {locale === 'ar' ? 'نسخ' : 'Copy'}
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div>
+                  <Label htmlFor="gsc-meta-primary">
+                    {locale === 'ar'
+                      ? 'التحقق عبر وسم meta (قيمة content)'
+                      : 'Meta tag verification (content value)'}
+                  </Label>
+                  <Input
+                    id="gsc-meta-primary"
+                    dir="ltr"
+                    className="mt-1 font-mono text-sm"
+                    placeholder={locale === 'ar' ? 'أو الصق وسم الميتا كاملاً' : 'Or paste full meta tag'}
+                    value={searchConsoleForm.siteVerificationMeta}
+                    onChange={(e) =>
+                      setSearchConsoleForm((p) => ({ ...p, siteVerificationMeta: e.target.value }))
+                    }
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {locale === 'ar'
+                      ? 'يُحقَن في metadata الرئيسية (وسم google-site-verification).'
+                      : 'Injected into root metadata as google-site-verification.'}
+                  </p>
+                </div>
+
+                <div>
+                  <Label htmlFor="gsc-meta-extra">
+                    {locale === 'ar' ? 'وسم meta إضافي (اختياري)' : 'Extra meta verification (optional)'}
+                  </Label>
+                  <Input
+                    id="gsc-meta-extra"
+                    dir="ltr"
+                    className="mt-1 font-mono text-sm"
+                    value={searchConsoleForm.extraMeta}
+                    onChange={(e) => setSearchConsoleForm((p) => ({ ...p, extraMeta: e.target.value }))}
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {locale === 'ar'
+                      ? 'وسم ثانٍ بنفس الاسم عند الحاجة (نطاقات متعددة أو طلبات منفصلة).'
+                      : 'Second meta tag when Google gives another token.'}
+                  </p>
+                </div>
+
+                <div>
+                  <Label htmlFor="gsc-html-name">
+                    {locale === 'ar'
+                      ? 'ملف HTML للتحقق (اسم الملف فقط)'
+                      : 'HTML file verification (filename only)'}
+                  </Label>
+                  <Input
+                    id="gsc-html-name"
+                    dir="ltr"
+                    className="mt-1 font-mono text-sm"
+                    placeholder="googlee2845b2f8c3d1a0b.html"
+                    value={searchConsoleForm.htmlFileName}
+                    onChange={(e) =>
+                      setSearchConsoleForm((p) => ({ ...p, htmlFileName: e.target.value }))
+                    }
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {locale === 'ar'
+                      ? 'يجب أن يبدأ الاسم بـ google وينتهي بـ .html كما يعطيك Search Console.'
+                      : 'Must match Google’s filename pattern: google*.html'}
+                  </p>
+                </div>
+
+                <div>
+                  <Label htmlFor="gsc-html-body">
+                    {locale === 'ar' ? 'محتوى الملف' : 'File body'}
+                  </Label>
+                  <Textarea
+                    id="gsc-html-body"
+                    dir="ltr"
+                    className="mt-1 min-h-[80px] font-mono text-xs"
+                    placeholder="google-site-verification: …"
+                    value={searchConsoleForm.htmlFileBody}
+                    onChange={(e) =>
+                      setSearchConsoleForm((p) => ({ ...p, htmlFileBody: e.target.value }))
+                    }
+                  />
+                </div>
+
+                {publicOrigin && searchConsoleForm.htmlFileName.trim() ? (
+                  <div className="flex flex-col gap-2 rounded-md border border-dashed border-border/80 p-3 sm:flex-row sm:items-center sm:gap-3">
+                    <span className="text-xs text-muted-foreground">
+                      {locale === 'ar' ? 'رابط الملف للصقه في Google:' : 'File URL for Google:'}
+                    </span>
+                    <Input
+                      readOnly
+                      dir="ltr"
+                      className="font-mono text-xs"
+                      value={`${publicOrigin}/${searchConsoleForm.htmlFileName.trim()}`}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        void copyPublicUrl(
+                          `${publicOrigin}/${searchConsoleForm.htmlFileName.trim()}`
+                        )
+                      }
+                    >
+                      <Copy className="me-1 h-3.5 w-3.5" />
+                      {locale === 'ar' ? 'نسخ' : 'Copy'}
+                    </Button>
+                  </div>
+                ) : null}
+
+                <Button
+                  type="button"
+                  onClick={() => void handleSaveSearchConsole()}
+                  disabled={savingSearchConsole}
+                  className="w-full"
+                >
+                  {savingSearchConsole ? (
+                    <RefreshCw className="ms-1 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Check className="ms-1 h-4 w-4" />
+                  )}
+                  {locale === 'ar' ? 'حفظ إعدادات Search Console' : 'Save Search Console settings'}
+                </Button>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="adsense" className="space-y-6">
+            <Card className="border-border bg-card/50 backdrop-blur-sm">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Megaphone className="h-5 w-5 text-primary" />
+                  {locale === 'ar' ? 'جوجل AdSense' : 'Google AdSense'}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <p className="text-sm text-muted-foreground">
+                  {locale === 'ar'
+                    ? 'إعلانات العرض و ads.txt. التحقق من الملكية وملفات Google تجدها في تبويب Search Console.'
+                    : 'Display ads and ads.txt. Ownership verification lives in the Search Console tab.'}
                 </p>
 
                 <div className="flex items-center justify-between gap-4 rounded-lg border border-border/80 p-4">
@@ -3527,25 +3934,6 @@ export default function AdminPage() {
                     value={adsenseForm.publisherId}
                     onChange={(e) => setAdsenseForm((p) => ({ ...p, publisherId: e.target.value }))}
                   />
-                </div>
-
-                <div>
-                  <Label htmlFor="adsense-verify">
-                    {locale === 'ar' ? 'التحقق من الموقع (قيمة content فقط)' : 'Site verification (meta content only)'}
-                  </Label>
-                  <Input
-                    id="adsense-verify"
-                    dir="ltr"
-                    className="mt-1 font-mono text-sm"
-                    placeholder={locale === 'ar' ? 'أو الصق وسم الميتا كاملاً' : 'Or paste full meta tag'}
-                    value={adsenseForm.siteVerification}
-                    onChange={(e) => setAdsenseForm((p) => ({ ...p, siteVerification: e.target.value }))}
-                  />
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {locale === 'ar'
-                      ? 'يُضاف كوسم meta في الصفحة لإثبات الملكية (Google / AdSense).'
-                      : 'Adds a meta tag for ownership verification.'}
-                  </p>
                 </div>
 
                 <div>
@@ -3840,6 +4228,7 @@ export default function AdminPage() {
               </CardContent>
             </Card>
           </TabsContent>
+          </div>
         </Tabs>
       </main>
 

@@ -549,11 +549,15 @@ export function AdvancedExchangeCalculator({
                   onChange={(e) => setForexPair(e.target.value)}
                   className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm dark:border-slate-600 dark:bg-slate-900/80"
                 >
-                  {forexRates.map((f) => (
-                    <option key={f.pair} value={f.pair}>
-                      {f.pair} — {locale === 'ar' ? f.nameAr : f.nameEn}
-                    </option>
-                  ))}
+                  {forexRates.map((f) => {
+                    const title =
+                      (locale === 'ar' ? f.nameAr : f.nameEn)?.trim() || f.pair;
+                    return (
+                      <option key={f.pair} value={f.pair}>
+                        {title} ({f.pair})
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
               <div className="space-y-2 sm:col-span-2">
@@ -844,13 +848,17 @@ export function AdvancedExchangeCalculator({
                     .filter((f) => allFxIds.includes(`fx:${f.pair}`))
                     .map((f) => {
                       const id = `fx:${f.pair}`;
+                      const title =
+                        (locale === 'ar' ? f.nameAr : f.nameEn)?.trim() || f.pair;
                       return (
                         <label key={id} className="flex cursor-pointer items-center gap-2 text-xs">
                           <Checkbox
                             checked={selectedTargets.has(id)}
                             onCheckedChange={(c) => toggleTarget(id, c === true)}
                           />
-                          <span className="truncate">{f.pair}</span>
+                          <span className="truncate" title={`${title} (${f.pair})`}>
+                            {title}
+                          </span>
                         </label>
                       );
                     })}

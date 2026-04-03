@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { upsertExchangeRateWithSnapshot, updateLatestGoldWithSnapshot } from '@/lib/rate-snapshot';
+import {
+  upsertExchangeRateWithSnapshot,
+  updateLatestGoldWithSnapshot,
+  type GoldSnapshotUpdate,
+} from '@/lib/rate-snapshot';
 
 // GET - Fetch all currencies for admin
 export async function GET() {
@@ -79,23 +83,44 @@ export async function POST(request: NextRequest) {
   }
 }
 
+function parseOptionalGoldGram(v: unknown): number | undefined {
+  if (v === undefined || v === null || v === '') return undefined;
+  const n = typeof v === 'number' ? v : parseFloat(String(v));
+  if (!Number.isFinite(n) || n <= 0) return undefined;
+  return n;
+}
+
 // PUT - Update gold price manually
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
-    const { priceUsd, pricePerGram } = body;
+    const { priceUsd, pricePerGram, pricePerGram21, pricePerGram18, pricePerGram14 } = body;
 
-    if (!priceUsd || !pricePerGram) {
+    if (priceUsd === undefined || pricePerGram === undefined) {
       return NextResponse.json(
         { success: false, error: 'Missing required fields' },
         { status: 400 }
       );
     }
 
-    await updateLatestGoldWithSnapshot(db, {
-      priceUsd: parseFloat(priceUsd),
-      pricePerGram: parseFloat(pricePerGram),
-    });
+    const pu = parseFloat(String(priceUsd));
+    const pg = parseFloat(String(pricePerGram));
+    if (!Number.isFinite(pu) || !Number.isFinite(pg) || pu <= 0 || pg <= 0) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid gold price values' },
+        { status: 400 }
+      );
+    }
+
+    const update: GoldSnapshotUpdate = { priceUsd: pu, pricePerGram: pg };
+    const g21 = parseOptionalGoldGram(pricePerGram21);
+    const g18 = parseOptionalGoldGram(pricePerGram18);
+    const g14 = parseOptionalGoldGram(pricePerGram14);
+    if (g21 !== undefined) update.pricePerGram21 = g21;
+    if (g18 !== undefined) update.pricePerGram18 = g18;
+    if (g14 !== undefined) update.pricePerGram14 = g14;
+
+    await updateLatestGoldWithSnapshot(db, update);
 
     // Update site last update time
     await db.siteSettings.updateMany({

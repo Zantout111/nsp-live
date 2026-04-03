@@ -13,6 +13,7 @@ export const DEFAULT_MARKET_SYMBOL_ROWS: FinnhubForexSymbolRow[] = [
   { finnhubSymbol: 'OANDA:EUR_JPY', pair: 'EUR/JPY' },
   // سلع: نستخدم Yahoo fallback بالبادئة YAHOO:
   { finnhubSymbol: 'YAHOO:GC=F', pair: 'XAU/USD' }, // Gold
+  { finnhubSymbol: 'YAHOO:SI=F', pair: 'XAG/USD' }, // Silver
   { finnhubSymbol: 'YAHOO:CL=F', pair: 'OIL/USD' }, // Crude Oil
   { finnhubSymbol: 'YAHOO:NG=F', pair: 'GAS/USD' }, // Natural Gas
   { finnhubSymbol: 'YAHOO:SB=F', pair: 'SUGAR/USD' }, // Sugar

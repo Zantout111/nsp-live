@@ -2,19 +2,20 @@ import { db } from '@/lib/db';
 
 /** بيانات أولية عندما تكون الجداول فارغة (لا يُبذَّر مع العملات في initializeDatabase) */
 const DEFAULT_FOREX_ROWS = [
-  { pair: 'EUR/USD', nameAr: 'يورو/دولار', nameEn: 'Euro/US Dollar', rate: 1.0856, change: 0.12, flag1: 'eu', flag2: 'us' },
-  { pair: 'GBP/USD', nameAr: 'جنيه/دولار', nameEn: 'British Pound/US Dollar', rate: 1.2634, change: -0.08, flag1: 'gb', flag2: 'us' },
-  { pair: 'USD/JPY', nameAr: 'دولار/ين', nameEn: 'US Dollar/Japanese Yen', rate: 154.32, change: 0.25, flag1: 'us', flag2: 'jp' },
-  { pair: 'USD/CHF', nameAr: 'دولار/فرنك', nameEn: 'US Dollar/Swiss Franc', rate: 0.8845, change: -0.15, flag1: 'us', flag2: 'ch' },
-  { pair: 'AUD/USD', nameAr: 'دولار أسترالي/دولار', nameEn: 'Australian Dollar/US Dollar', rate: 0.6523, change: 0.18, flag1: 'au', flag2: 'us' },
-  { pair: 'USD/CAD', nameAr: 'دولار/دولار كندي', nameEn: 'US Dollar/Canadian Dollar', rate: 1.3678, change: -0.22, flag1: 'us', flag2: 'ca' },
-  { pair: 'EUR/GBP', nameAr: 'يورو/جنيه', nameEn: 'Euro/British Pound', rate: 0.8592, change: 0.05, flag1: 'eu', flag2: 'gb' },
-  { pair: 'EUR/JPY', nameAr: 'يورو/ين', nameEn: 'Euro/Japanese Yen', rate: 167.45, change: 0.32, flag1: 'eu', flag2: 'jp' },
-  { pair: 'XAU/USD', nameAr: 'الذهب/دولار', nameEn: 'Gold/US Dollar', rate: 2300.25, change: 0.18, flag1: 'asset-gold', flag2: 'us' },
-  { pair: 'OIL/USD', nameAr: 'النفط/دولار', nameEn: 'Oil/US Dollar', rate: 79.35, change: -0.12, flag1: 'asset-oil', flag2: 'us' },
-  { pair: 'GAS/USD', nameAr: 'الغاز/دولار', nameEn: 'Gas/US Dollar', rate: 2.15, change: 0.44, flag1: 'asset-gas', flag2: 'us' },
-  { pair: 'SUGAR/USD', nameAr: 'السكر/دولار', nameEn: 'Sugar/US Dollar', rate: 22.6, change: 0.09, flag1: 'asset-sugar', flag2: 'us' },
-  { pair: 'RICE/USD', nameAr: 'الأرز/دولار', nameEn: 'Rice/US Dollar', rate: 17.85, change: -0.03, flag1: 'asset-rice', flag2: 'us' },
+  { pair: 'EUR/USD', nameAr: 'اليورو مقابل الدولار', nameEn: 'Euro vs US Dollar', rate: 1.0856, change: 0.12, flag1: 'eu', flag2: 'us' },
+  { pair: 'GBP/USD', nameAr: 'الجنيه الإسترليني مقابل الدولار', nameEn: 'British Pound vs US Dollar', rate: 1.2634, change: -0.08, flag1: 'gb', flag2: 'us' },
+  { pair: 'USD/JPY', nameAr: 'الدولار مقابل الين الياباني', nameEn: 'US Dollar vs Japanese Yen', rate: 154.32, change: 0.25, flag1: 'us', flag2: 'jp' },
+  { pair: 'USD/CHF', nameAr: 'الدولار مقابل الفرنك السويسري', nameEn: 'US Dollar vs Swiss Franc', rate: 0.8845, change: -0.15, flag1: 'us', flag2: 'ch' },
+  { pair: 'AUD/USD', nameAr: 'الدولار الأسترالي مقابل الدولار الأمريكي', nameEn: 'Australian Dollar vs US Dollar', rate: 0.6523, change: 0.18, flag1: 'au', flag2: 'us' },
+  { pair: 'USD/CAD', nameAr: 'الدولار مقابل الدولار الكندي', nameEn: 'US Dollar vs Canadian Dollar', rate: 1.3678, change: -0.22, flag1: 'us', flag2: 'ca' },
+  { pair: 'EUR/GBP', nameAr: 'اليورو مقابل الجنيه الإسترليني', nameEn: 'Euro vs British Pound', rate: 0.8592, change: 0.05, flag1: 'eu', flag2: 'gb' },
+  { pair: 'EUR/JPY', nameAr: 'اليورو مقابل الين الياباني', nameEn: 'Euro vs Japanese Yen', rate: 167.45, change: 0.32, flag1: 'eu', flag2: 'jp' },
+  { pair: 'XAU/USD', nameAr: 'الذهب مقابل الدولار', nameEn: 'Gold vs US Dollar', rate: 2300.25, change: 0.18, flag1: 'asset-gold', flag2: 'us' },
+  { pair: 'XAG/USD', nameAr: 'الفضة مقابل الدولار', nameEn: 'Silver vs US Dollar', rate: 28.5, change: 0.1, flag1: 'asset-silver', flag2: 'us' },
+  { pair: 'OIL/USD', nameAr: 'النفط مقابل الدولار', nameEn: 'Crude Oil vs US Dollar', rate: 79.35, change: -0.12, flag1: 'asset-oil', flag2: 'us' },
+  { pair: 'GAS/USD', nameAr: 'الغاز الطبيعي مقابل الدولار', nameEn: 'Natural Gas vs US Dollar', rate: 2.15, change: 0.44, flag1: 'asset-gas', flag2: 'us' },
+  { pair: 'SUGAR/USD', nameAr: 'السكر مقابل الدولار', nameEn: 'Sugar vs US Dollar', rate: 22.6, change: 0.09, flag1: 'asset-sugar', flag2: 'us' },
+  { pair: 'RICE/USD', nameAr: 'الأرز مقابل الدولار', nameEn: 'Rice vs US Dollar', rate: 17.85, change: -0.03, flag1: 'asset-rice', flag2: 'us' },
 ];
 
 const DEFAULT_CRYPTO_ROWS = [
@@ -69,6 +70,14 @@ export async function ensureForexCryptoSeeded(): Promise<void> {
       row.change,
       row.flag1,
       row.flag2
+    );
+  }
+  for (const row of DEFAULT_FOREX_ROWS) {
+    await db.$executeRawUnsafe(
+      `UPDATE ForexRate SET nameAr = ?, nameEn = ? WHERE pair = ?`,
+      row.nameAr,
+      row.nameEn,
+      row.pair
     );
   }
   // SQLite: إدراج آمن بدون تكرار حتى مع طلبات متزامنة

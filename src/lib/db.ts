@@ -57,6 +57,13 @@ export async function ensureSqliteSchema(): Promise<void> {
   await tryAlter(`ALTER TABLE GoldPrice ADD COLUMN prevPricePerGram REAL`);
   await tryAlter(`ALTER TABLE GoldPrice ADD COLUMN prevCapturedAt DATETIME`);
 
+  await tryAlter(`ALTER TABLE GoldPrice ADD COLUMN pricePerGram21 REAL`);
+  await tryAlter(`ALTER TABLE GoldPrice ADD COLUMN pricePerGram18 REAL`);
+  await tryAlter(`ALTER TABLE GoldPrice ADD COLUMN pricePerGram14 REAL`);
+  await tryAlter(`ALTER TABLE GoldPrice ADD COLUMN prevPricePerGram21 REAL`);
+  await tryAlter(`ALTER TABLE GoldPrice ADD COLUMN prevPricePerGram18 REAL`);
+  await tryAlter(`ALTER TABLE GoldPrice ADD COLUMN prevPricePerGram14 REAL`);
+
   await tryAlter(`ALTER TABLE FuelPrice ADD COLUMN prevPrice REAL`);
   await tryAlter(`ALTER TABLE FuelPrice ADD COLUMN prevCapturedAt DATETIME`);
 
@@ -86,6 +93,9 @@ export async function ensureSqliteSchema(): Promise<void> {
   await tryAlter(`ALTER TABLE SiteSettings ADD COLUMN adsTxtRaw TEXT`);
   await tryAlter(`ALTER TABLE SiteSettings ADD COLUMN adsenseSlotHero TEXT`);
   await tryAlter(`ALTER TABLE SiteSettings ADD COLUMN adsenseSlotContent TEXT`);
+  await tryAlter(`ALTER TABLE SiteSettings ADD COLUMN gscHtmlVerificationFileName TEXT`);
+  await tryAlter(`ALTER TABLE SiteSettings ADD COLUMN gscHtmlVerificationFileBody TEXT`);
+  await tryAlter(`ALTER TABLE SiteSettings ADD COLUMN gscExtraSiteVerificationMeta TEXT`);
 
   sqliteSchemaEnsured = true;
 }

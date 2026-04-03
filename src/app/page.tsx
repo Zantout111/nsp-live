@@ -52,9 +52,15 @@ interface CurrencyRate {
 interface GoldPriceData {
   priceUsd: number;
   pricePerGram: number;
+  pricePerGram21?: number | null;
+  pricePerGram18?: number | null;
+  pricePerGram14?: number | null;
   lastUpdated: string;
   changeOuncePct?: number | null;
   changeGramPct?: number | null;
+  changeGram21Pct?: number | null;
+  changeGram18Pct?: number | null;
+  changeGram14Pct?: number | null;
 }
 
 interface FuelPriceData {
@@ -182,6 +188,7 @@ const FOREX_PAIR_CARD_CLASS: Record<string, string> = {
   'EUR/GBP': 'border-violet-500/25 bg-violet-500/10',
   'EUR/JPY': 'border-fuchsia-500/25 bg-fuchsia-500/10',
   'XAU/USD': 'border-yellow-500/25 bg-yellow-500/10',
+  'XAG/USD': 'border-slate-400/30 bg-slate-400/10',
   'OIL/USD': 'border-zinc-500/25 bg-zinc-500/10',
   'GAS/USD': 'border-cyan-500/25 bg-cyan-500/10',
   'SUGAR/USD': 'border-pink-500/25 bg-pink-500/10',
@@ -190,6 +197,7 @@ const FOREX_PAIR_CARD_CLASS: Record<string, string> = {
 
 const MARKET_ASSET_EMOJI: Record<string, string> = {
   'asset-gold': '🥇',
+  'asset-silver': '🥈',
   'asset-oil': '🛢️',
   'asset-gas': '🔥',
   'asset-sugar': '🍬',
@@ -218,6 +226,7 @@ const MARKET_ESTIMATED_SIZE_UNIT: Record<
   { ar: string; en: string }
 > = {
   'XAU/USD': { ar: 'أونصة', en: 'oz' },
+  'XAG/USD': { ar: 'أونصة', en: 'oz' },
   'OIL/USD': { ar: 'برميل', en: 'barrel' },
   'GAS/USD': { ar: 'م.و.ح', en: 'MMBtu' },
   'SUGAR/USD': { ar: '≈ 0.454 كغ', en: '≈ 0.454 kg' },
@@ -258,6 +267,16 @@ function usdPerCurrencyFromForexRows(rows: ForexRateData[]): Map<string, number>
     else if (base === 'USD') out.set(quote, 1 / rate);
   }
   return out;
+}
+
+/** عنوان البطاقة: الاسم الوصفي من قاعدة البيانات وليس رمز الزوج فقط. */
+function forexPairTitle(fx: Pick<ForexRateData, 'pair' | 'nameAr' | 'nameEn'>, loc: string): string {
+  if (loc === 'ar') {
+    const n = String(fx.nameAr ?? '').trim();
+    return n || fx.pair;
+  }
+  const n = String(fx.nameEn ?? '').trim();
+  return n || fx.pair;
 }
 
 function marketApproxSyp(
@@ -1596,6 +1615,113 @@ export default function Home() {
                       );
                     })}
                   </div>
+
+                  {(() => {
+                    const karats: { k: 21 | 18 | 14; usd: number; delta: number | null | undefined }[] = [];
+                    if (data.goldPrice.pricePerGram21 != null && data.goldPrice.pricePerGram21 > 0) {
+                      karats.push({
+                        k: 21,
+                        usd: data.goldPrice.pricePerGram21,
+                        delta: data.goldPrice.changeGram21Pct,
+                      });
+                    }
+                    if (data.goldPrice.pricePerGram18 != null && data.goldPrice.pricePerGram18 > 0) {
+                      karats.push({
+                        k: 18,
+                        usd: data.goldPrice.pricePerGram18,
+                        delta: data.goldPrice.changeGram18Pct,
+                      });
+                    }
+                    if (data.goldPrice.pricePerGram14 != null && data.goldPrice.pricePerGram14 > 0) {
+                      karats.push({
+                        k: 14,
+                        usd: data.goldPrice.pricePerGram14,
+                        delta: data.goldPrice.changeGram14Pct,
+                      });
+                    }
+                    if (karats.length === 0) return null;
+                    const usdRate = getFeaturedCurrency('USD');
+                    return (
+                      <div className="mt-8 border-t border-amber-500/20 pt-8">
+                        <div className="grid gap-4 md:grid-cols-3">
+                          {karats.map(({ k, usd, delta }) => {
+                            const sypVal =
+                              usdRate != null && usdRate.buyRate > 0
+                                ? formatNumber(usd * usdRate.buyRate)
+                                : '---';
+                            const displayUsd = `$${formatUsd(usd, 2)}`;
+                            const displayFull =
+                              usdRate != null ? `${sypVal} ${getCurrencySymbol()}` : String(sypVal);
+                            const iconRing =
+                              'from-amber-400/40 via-amber-500/25 to-yellow-600/15 ring-amber-500/30 dark:from-amber-500/35 dark:via-amber-600/20 dark:ring-amber-400/30';
+                            return (
+                              <div
+                                key={k}
+                                className="relative overflow-hidden rounded-xl border border-amber-500/35 bg-gradient-to-b from-amber-500/[0.07] to-transparent p-4 pt-12 text-center shadow-sm transition-shadow hover:shadow-md"
+                              >
+                                <div
+                                  className="pointer-events-none absolute -end-6 -top-6 h-24 w-24 rounded-full bg-amber-400 opacity-[0.12] blur-2xl"
+                                  aria-hidden
+                                />
+                                {shareBase && (
+                                  <div className="absolute end-2 top-2 z-10">
+                                    <PriceShareButton
+                                      {...shareBase}
+                                      size="icon"
+                                      className="h-7 w-7"
+                                      headline={
+                                        locale === 'ar'
+                                          ? `ذهب عيار ${k} — غرام`
+                                          : `Gold ${k}K — per gram`
+                                      }
+                                      subheadline={
+                                        locale === 'ar'
+                                          ? `عيار ${k} — دولار وليرة`
+                                          : `${k}K — USD & SYP`
+                                      }
+                                      rows={[
+                                        {
+                                          label: locale === 'ar' ? 'الغرام بالدولار' : 'Gram USD',
+                                          value: displayUsd,
+                                          tone: 'neutral',
+                                        },
+                                        {
+                                          label: locale === 'ar' ? 'الغرام بالليرة' : 'Gram SYP',
+                                          value: displayFull,
+                                          tone: 'neutral',
+                                        },
+                                      ]}
+                                      fileNameSlug={`gold-k${k}`}
+                                      detailLine={`${k}K: ${displayUsd} · ${displayFull}`}
+                                    />
+                                  </div>
+                                )}
+                                <div
+                                  className={`relative mx-auto mb-4 flex h-[4.75rem] w-[4.75rem] shrink-0 items-center justify-center rounded-full bg-gradient-to-br p-0 shadow-md ring-2 ${iconRing}`}
+                                >
+                                  <span className="text-2xl font-black tabular-nums text-amber-800 dark:text-amber-200">
+                                    {k}
+                                  </span>
+                                </div>
+                                <p className="relative mb-1 text-sm font-medium text-muted-foreground">
+                                  {locale === 'ar' ? `عيار ${k} — غرام` : `${k}K — gram`}
+                                </p>
+                                <p className="relative text-xl font-bold tabular-nums text-amber-700 dark:text-amber-400">
+                                  {displayUsd}
+                                </p>
+                                <p className="relative mt-1 text-sm font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">
+                                  {displayFull}
+                                </p>
+                                <div className="relative mt-2 flex justify-center">
+                                  <RateDeltaBadge pct={delta} />
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
             </TabsContent>
@@ -1696,12 +1822,17 @@ export default function Home() {
                 ) : null}
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                   {data?.forexRates?.map((pair) => {
+                    const fxTitle = forexPairTitle(pair, locale);
                     const approxSyp = marketApproxSyp(
                       pair.pair,
                       Number(pair.rate),
                       getFeaturedCurrency('USD')?.buyRate ?? null,
                       data.forexRates
                     );
+                    const shareDetail =
+                      approxSyp != null
+                        ? `${fxTitle} (${pair.pair}): ${pair.rate} · ≈ ${formatNumber(approxSyp)} ${getCurrencySymbol()}`
+                        : `${fxTitle} (${pair.pair}): ${pair.rate}`;
                     return (
                     <div
                       key={pair.pair}
@@ -1719,7 +1850,7 @@ export default function Home() {
                             size="icon"
                             className="h-7 w-7"
                             headline={locale === 'ar' ? 'البورصات العالمية' : 'Global markets'}
-                            subheadline={pair.pair}
+                            subheadline={fxTitle}
                             rows={[
                               { label: locale === 'ar' ? 'السعر' : 'Rate', value: String(pair.rate), tone: 'neutral' },
                               ...(approxSyp != null
@@ -1733,11 +1864,7 @@ export default function Home() {
                                 : []),
                             ]}
                             fileNameSlug={`fx-${pair.pair.replace(/[\/\\]/g, '-')}`}
-                            detailLine={
-                              approxSyp != null
-                                ? `${pair.pair}: ${pair.rate} · ≈ ${formatNumber(approxSyp)} ${getCurrencySymbol()}`
-                                : `${pair.pair}: ${pair.rate}`
-                            }
+                            detailLine={shareDetail}
                           />
                         </div>
                       )}
@@ -1746,7 +1873,7 @@ export default function Home() {
                           <MarketBadge code={pair.flag1} />
                           <MarketBadge code={pair.flag2} />
                         </div>
-                        <span className="font-bold">{pair.pair}</span>
+                        <span className="min-w-0 font-bold leading-snug">{fxTitle}</span>
                         {MARKET_ESTIMATED_SIZE_UNIT[pair.pair] && (
                           <span className="rounded-full border border-border/60 bg-background/50 px-1.5 py-0.5 text-[10px] text-muted-foreground">
                             {locale === 'ar'

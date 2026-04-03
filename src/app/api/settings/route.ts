@@ -19,6 +19,11 @@ import {
   sanitizeAdsTxtRaw,
   sanitizeSiteVerification,
 } from '@/lib/adsense-config';
+import {
+  sanitizeGscExtraMeta,
+  sanitizeGscHtmlFileBody,
+  sanitizeGscHtmlFileName,
+} from '@/lib/gsc-html-verification';
 
 export const dynamic = 'force-dynamic';
 
@@ -103,6 +108,9 @@ export async function GET() {
         adsTxtRaw: settings?.adsTxtRaw ?? null,
         adsenseSlotHero: settings?.adsenseSlotHero ?? null,
         adsenseSlotContent: settings?.adsenseSlotContent ?? null,
+        gscHtmlVerificationFileName: settings?.gscHtmlVerificationFileName ?? null,
+        gscHtmlVerificationFileBody: settings?.gscHtmlVerificationFileBody ?? null,
+        gscExtraSiteVerificationMeta: settings?.gscExtraSiteVerificationMeta ?? null,
       },
     });
   } catch (error) {
@@ -172,6 +180,9 @@ export async function PUT(request: Request) {
       adsTxtRaw,
       adsenseSlotHero,
       adsenseSlotContent,
+      gscHtmlVerificationFileName,
+      gscHtmlVerificationFileBody,
+      gscExtraSiteVerificationMeta,
     } = body as Record<string, unknown> & {
       forexRealtimeEnabled?: boolean;
       finnhubForexSymbolRows?: FinnhubForexSymbolRow[];
@@ -186,6 +197,9 @@ export async function PUT(request: Request) {
       adsTxtRaw?: string | null;
       adsenseSlotHero?: string | null;
       adsenseSlotContent?: string | null;
+      gscHtmlVerificationFileName?: string | null;
+      gscHtmlVerificationFileBody?: string | null;
+      gscExtraSiteVerificationMeta?: string | null;
     };
 
     const settings = await db.siteSettings.findFirst();
@@ -372,6 +386,40 @@ export async function PUT(request: Request) {
       updateData.adsenseSlotContent = t === '' ? null : sanitizeAdSlot(t);
     }
 
+    if (gscHtmlVerificationFileName !== undefined) {
+      const rawN =
+        gscHtmlVerificationFileName === null ? '' : String(gscHtmlVerificationFileName).trim();
+      if (rawN === '') {
+        updateData.gscHtmlVerificationFileName = null;
+        updateData.gscHtmlVerificationFileBody = null;
+      } else {
+        const n = sanitizeGscHtmlFileName(rawN);
+        if (!n) {
+          updateData.gscHtmlVerificationFileName = null;
+          updateData.gscHtmlVerificationFileBody = null;
+        } else {
+          updateData.gscHtmlVerificationFileName = n;
+          const bodyRaw =
+            gscHtmlVerificationFileBody === null || gscHtmlVerificationFileBody === undefined
+              ? null
+              : String(gscHtmlVerificationFileBody);
+          const b = sanitizeGscHtmlFileBody(bodyRaw);
+          if (!b) {
+            updateData.gscHtmlVerificationFileName = null;
+            updateData.gscHtmlVerificationFileBody = null;
+          } else {
+            updateData.gscHtmlVerificationFileBody = b;
+          }
+        }
+      }
+    }
+
+    if (gscExtraSiteVerificationMeta !== undefined) {
+      updateData.gscExtraSiteVerificationMeta = sanitizeGscExtraMeta(
+        gscExtraSiteVerificationMeta === null ? null : String(gscExtraSiteVerificationMeta)
+      );
+    }
+
     let savedSettingsId: string;
 
     if (settings) {
@@ -473,6 +521,46 @@ export async function PUT(request: Request) {
                   adsenseSlotContent === null || String(adsenseSlotContent).trim() === ''
                     ? null
                     : sanitizeAdSlot(String(adsenseSlotContent).trim()),
+              }
+            : {}),
+          ...(gscHtmlVerificationFileName !== undefined
+            ? (() => {
+                const rawN =
+                  gscHtmlVerificationFileName === null
+                    ? ''
+                    : String(gscHtmlVerificationFileName).trim();
+                if (rawN === '') {
+                  return {
+                    gscHtmlVerificationFileName: null as string | null,
+                    gscHtmlVerificationFileBody: null as string | null,
+                  };
+                }
+                const n = sanitizeGscHtmlFileName(rawN);
+                if (!n) {
+                  return {
+                    gscHtmlVerificationFileName: null as string | null,
+                    gscHtmlVerificationFileBody: null as string | null,
+                  };
+                }
+                const b = sanitizeGscHtmlFileBody(
+                  gscHtmlVerificationFileBody === null || gscHtmlVerificationFileBody === undefined
+                    ? null
+                    : String(gscHtmlVerificationFileBody)
+                );
+                if (!b) {
+                  return {
+                    gscHtmlVerificationFileName: null as string | null,
+                    gscHtmlVerificationFileBody: null as string | null,
+                  };
+                }
+                return { gscHtmlVerificationFileName: n, gscHtmlVerificationFileBody: b };
+              })()
+            : {}),
+          ...(gscExtraSiteVerificationMeta !== undefined
+            ? {
+                gscExtraSiteVerificationMeta: sanitizeGscExtraMeta(
+                  gscExtraSiteVerificationMeta === null ? null : String(gscExtraSiteVerificationMeta)
+                ),
               }
             : {}),
         },

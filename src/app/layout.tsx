@@ -48,10 +48,15 @@ export default async function RootLayout({
   const cookieStore = await cookies();
   const locale = cookieStore.get('locale')?.value || 'ar';
   const messages = await getMessages();
-  const { scriptClient } = await getAdsenseLayoutData();
+  const { scriptClient, verificationGoogleExtra } = await getAdsenseLayoutData();
 
   return (
     <html lang={locale} dir={locale === 'ar' ? 'rtl' : 'ltr'} suppressHydrationWarning>
+      <head>
+        {verificationGoogleExtra ? (
+          <meta name="google-site-verification" content={verificationGoogleExtra} />
+        ) : null}
+      </head>
       <body
         className={`${cairo.variable} font-sans antialiased bg-background text-foreground`}
       >

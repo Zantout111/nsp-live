@@ -64,6 +64,11 @@ function displayRatesWithOscillation(
   if (!Number.isFinite(b) || b <= 0) return { buy: 0, sell: 0 };
   if (!Number.isFinite(s) || s <= 0) return { buy: Math.round(b), sell: Math.round(b) };
 
+  /** الليرة التركية: بدون تأرجح حول السعر المخزّن */
+  if (code === 'TRY') {
+    return { buy: Math.round(b), sell: Math.round(s) };
+  }
+
   const off = oscillationOffsetForCurrency((b + s) / 2, `fx-${code}`, nowMs);
   let buy = Math.max(1, Math.round(b + off));
   let sell = Math.max(1, Math.round(s + off));
@@ -322,9 +327,24 @@ export async function GET(request: NextRequest) {
         goldPrice: goldPrice ? {
           priceUsd: goldPrice.priceUsd,
           pricePerGram: goldPrice.pricePerGram,
+          pricePerGram21: goldPrice.pricePerGram21 ?? null,
+          pricePerGram18: goldPrice.pricePerGram18 ?? null,
+          pricePerGram14: goldPrice.pricePerGram14 ?? null,
           lastUpdated: goldPrice.lastUpdated,
           changeOuncePct: pctDeltaFromPrevious(goldPrice.prevPriceUsd ?? null, goldPrice.priceUsd),
           changeGramPct: pctDeltaFromPrevious(goldPrice.prevPricePerGram ?? null, goldPrice.pricePerGram),
+          changeGram21Pct:
+            goldPrice.pricePerGram21 != null
+              ? pctDeltaFromPrevious(goldPrice.prevPricePerGram21 ?? null, goldPrice.pricePerGram21)
+              : null,
+          changeGram18Pct:
+            goldPrice.pricePerGram18 != null
+              ? pctDeltaFromPrevious(goldPrice.prevPricePerGram18 ?? null, goldPrice.pricePerGram18)
+              : null,
+          changeGram14Pct:
+            goldPrice.pricePerGram14 != null
+              ? pctDeltaFromPrevious(goldPrice.prevPricePerGram14 ?? null, goldPrice.pricePerGram14)
+              : null,
         } : null,
         fuelPrices: visibleFuel,
         siteName: settings?.siteName || 'سعر الليرة السورية',

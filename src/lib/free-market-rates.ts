@@ -73,6 +73,7 @@ export async function fetchFrankfurterSpotForPair(pair: string): Promise<number 
 
 const YAHOO_SYMBOL_BY_PAIR: Record<string, string> = {
   'XAU/USD': 'GC=F', // Gold futures
+  'XAG/USD': 'SI=F', // Silver futures (COMEX)
   'OIL/USD': 'CL=F', // Crude oil WTI
   'GAS/USD': 'NG=F', // Natural gas
   'SUGAR/USD': 'SB=F', // Sugar No.11
