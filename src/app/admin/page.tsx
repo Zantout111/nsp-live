@@ -19,6 +19,7 @@ import { useTranslations, useLocale } from 'next-intl';
 import { numberingLatn } from '@/lib/intl-latn';
 import { DEFAULT_LOGO_SIZES, parseLogoSizes, type LogoSizes } from '@/lib/logo-sizes';
 import { resolveLogoUrlForClient } from '@/lib/resolve-logo-url';
+import { AdminArticlesTab } from '@/components/admin-articles-tab';
 import type { SyncCategoryId, SyncConfigV1, CategorySyncConfig } from '@/lib/sync-config';
 import { SYNC_CATEGORY_IDS, defaultSyncConfigV1 } from '@/lib/sync-config';
 import { DEFAULT_MARKET_SYMBOL_ROWS } from '@/lib/finnhub-types';
@@ -389,6 +390,10 @@ export default function AdminPage() {
     adsTxtRaw: '',
     slotHero: '',
     slotContent: '',
+    slotArticle: '',
+    articleTopEnabled: false,
+    articleInlineEnabled: false,
+    articleBottomEnabled: false,
   });
   const [savingAdsense, setSavingAdsense] = useState(false);
 
@@ -553,6 +558,10 @@ export default function AdminPage() {
           adsTxtRaw: result.settings.adsTxtRaw ?? '',
           slotHero: result.settings.adsenseSlotHero ?? '',
           slotContent: result.settings.adsenseSlotContent ?? '',
+          slotArticle: result.settings.adsenseSlotArticle ?? '',
+          articleTopEnabled: Boolean(result.settings.adsenseArticleTopEnabled),
+          articleInlineEnabled: Boolean(result.settings.adsenseArticleInlineEnabled),
+          articleBottomEnabled: Boolean(result.settings.adsenseArticleBottomEnabled),
         });
         setSearchConsoleForm({
           siteVerificationMeta: result.settings.adsenseSiteVerification ?? '',
@@ -1127,6 +1136,10 @@ export default function AdminPage() {
           adsTxtRaw: adsenseForm.adsTxtRaw.trim() || null,
           adsenseSlotHero: adsenseForm.slotHero.trim() || null,
           adsenseSlotContent: adsenseForm.slotContent.trim() || null,
+          adsenseSlotArticle: adsenseForm.slotArticle.trim() || null,
+          adsenseArticleTopEnabled: adsenseForm.articleTopEnabled,
+          adsenseArticleInlineEnabled: adsenseForm.articleInlineEnabled,
+          adsenseArticleBottomEnabled: adsenseForm.articleBottomEnabled,
         }),
       });
       const result = (await response.json().catch(() => ({}))) as { success?: boolean };
@@ -1930,6 +1943,12 @@ export default function AdminPage() {
                 <Megaphone className="h-4 w-4 shrink-0" />
                 <span className={cn('hidden sm:inline', sidebarCollapsed && 'lg:hidden')}>
                   AdSense
+                </span>
+              </TabsTrigger>
+              <TabsTrigger value="articles" className={adminSidebarTriggerClass}>
+                <FileSearch className="h-4 w-4 shrink-0" />
+                <span className={cn('hidden sm:inline', sidebarCollapsed && 'lg:hidden')}>
+                  {locale === 'ar' ? 'المقالات' : 'Articles'}
                 </span>
               </TabsTrigger>
               <TabsTrigger value="api" className={adminSidebarTriggerClass}>
@@ -3982,6 +4001,49 @@ export default function AdminPage() {
                   </div>
                 </div>
 
+                <div className="space-y-3 rounded-lg border border-border/80 p-4">
+                  <p className="font-medium">
+                    {locale === 'ar' ? 'إعلانات داخل صفحة المقال' : 'In-article ad placement'}
+                  </p>
+                  <div>
+                    <Label htmlFor="adsense-slot-article">
+                      {locale === 'ar' ? 'وحدة المقال (data-ad-slot)' : 'Article ad slot (data-ad-slot)'}
+                    </Label>
+                    <Input
+                      id="adsense-slot-article"
+                      dir="ltr"
+                      inputMode="numeric"
+                      className="mt-1 font-mono text-sm"
+                      placeholder="1234567890"
+                      value={adsenseForm.slotArticle}
+                      onChange={(e) => setAdsenseForm((p) => ({ ...p, slotArticle: e.target.value }))}
+                    />
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <label className="flex items-center justify-between rounded-md border border-border/70 p-3">
+                      <span className="text-sm">{locale === 'ar' ? 'أعلى المقال' : 'Top of article'}</span>
+                      <Switch
+                        checked={adsenseForm.articleTopEnabled}
+                        onCheckedChange={(v) => setAdsenseForm((p) => ({ ...p, articleTopEnabled: v }))}
+                      />
+                    </label>
+                    <label className="flex items-center justify-between rounded-md border border-border/70 p-3">
+                      <span className="text-sm">{locale === 'ar' ? 'وسط المقال' : 'Middle of article'}</span>
+                      <Switch
+                        checked={adsenseForm.articleInlineEnabled}
+                        onCheckedChange={(v) => setAdsenseForm((p) => ({ ...p, articleInlineEnabled: v }))}
+                      />
+                    </label>
+                    <label className="flex items-center justify-between rounded-md border border-border/70 p-3">
+                      <span className="text-sm">{locale === 'ar' ? 'أسفل المقال' : 'Bottom of article'}</span>
+                      <Switch
+                        checked={adsenseForm.articleBottomEnabled}
+                        onCheckedChange={(v) => setAdsenseForm((p) => ({ ...p, articleBottomEnabled: v }))}
+                      />
+                    </label>
+                  </div>
+                </div>
+
                 <p className="text-xs text-muted-foreground">
                   {locale === 'ar'
                     ? 'يُفضّل عدم زيادة عدد الوحدات عن وحدتين في الصفحة الرئيسية، مع تسمية «إعلان» كما هو معروض. قبول AdSense يعتمد على المحتوى وسياسة الخصوصية وليس على الإعدادات التقنية وحدها.'
@@ -3998,6 +4060,10 @@ export default function AdminPage() {
                 </Button>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="articles" className="space-y-6">
+            <AdminArticlesTab locale={locale} />
           </TabsContent>
 
           <TabsContent value="api" className="space-y-6">

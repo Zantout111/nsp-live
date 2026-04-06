@@ -7,6 +7,22 @@ import { sanitizeGscExtraMeta } from '@/lib/gsc-html-verification';
 export const getAdsenseLayoutData = cache(async () => {
   await ensureSqliteSchema();
   const s = await db.siteSettings.findFirst();
+  const articleAdsRows =
+    s?.id != null
+      ? await db.$queryRawUnsafe<
+          Array<{
+            adsenseSlotArticle: string | null;
+            adsenseArticleTopEnabled: number | null;
+            adsenseArticleInlineEnabled: number | null;
+            adsenseArticleBottomEnabled: number | null;
+          }>
+        >(
+          `SELECT adsenseSlotArticle, adsenseArticleTopEnabled, adsenseArticleInlineEnabled, adsenseArticleBottomEnabled
+           FROM SiteSettings WHERE id = ? LIMIT 1`,
+          s.id
+        )
+      : [];
+  const articleAds = articleAdsRows[0] ?? null;
   const verification = s?.adsenseSiteVerification?.trim();
   const safeVerification =
     verification && !/[<>]/.test(verification) ? verification.slice(0, 200) : undefined;
@@ -18,5 +34,9 @@ export const getAdsenseLayoutData = cache(async () => {
     verificationGoogle: safeVerification,
     verificationGoogleExtra,
     scriptClient,
+    articleSlot: articleAds?.adsenseSlotArticle ?? null,
+    articleTopEnabled: Boolean(articleAds?.adsenseArticleTopEnabled),
+    articleInlineEnabled: Boolean(articleAds?.adsenseArticleInlineEnabled),
+    articleBottomEnabled: Boolean(articleAds?.adsenseArticleBottomEnabled),
   };
 });

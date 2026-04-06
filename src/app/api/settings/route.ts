@@ -44,6 +44,22 @@ export async function GET() {
   try {
     await ensureSqliteSchema();
     const settings = await db.siteSettings.findFirst();
+    const adArticleRaw =
+      settings?.id != null
+        ? await db.$queryRawUnsafe<
+            Array<{
+              adsenseSlotArticle: string | null;
+              adsenseArticleTopEnabled: number | null;
+              adsenseArticleInlineEnabled: number | null;
+              adsenseArticleBottomEnabled: number | null;
+            }>
+          >(
+            `SELECT adsenseSlotArticle, adsenseArticleTopEnabled, adsenseArticleInlineEnabled, adsenseArticleBottomEnabled
+             FROM SiteSettings WHERE id = ? LIMIT 1`,
+            settings.id
+          )
+        : [];
+    const adArticle = adArticleRaw[0] ?? null;
     const tiktok =
       settings?.id != null ? await readFooterSocialTiktok(db, settings.id) : null;
     const fuelVisibilityMap = await readFuelVisibilityMap(settings?.id);
@@ -108,6 +124,10 @@ export async function GET() {
         adsTxtRaw: settings?.adsTxtRaw ?? null,
         adsenseSlotHero: settings?.adsenseSlotHero ?? null,
         adsenseSlotContent: settings?.adsenseSlotContent ?? null,
+        adsenseSlotArticle: adArticle?.adsenseSlotArticle ?? null,
+        adsenseArticleTopEnabled: Boolean(adArticle?.adsenseArticleTopEnabled),
+        adsenseArticleInlineEnabled: Boolean(adArticle?.adsenseArticleInlineEnabled),
+        adsenseArticleBottomEnabled: Boolean(adArticle?.adsenseArticleBottomEnabled),
         gscHtmlVerificationFileName: settings?.gscHtmlVerificationFileName ?? null,
         gscHtmlVerificationFileBody: settings?.gscHtmlVerificationFileBody ?? null,
         gscExtraSiteVerificationMeta: settings?.gscExtraSiteVerificationMeta ?? null,
@@ -180,6 +200,10 @@ export async function PUT(request: Request) {
       adsTxtRaw,
       adsenseSlotHero,
       adsenseSlotContent,
+      adsenseSlotArticle,
+      adsenseArticleTopEnabled,
+      adsenseArticleInlineEnabled,
+      adsenseArticleBottomEnabled,
       gscHtmlVerificationFileName,
       gscHtmlVerificationFileBody,
       gscExtraSiteVerificationMeta,
@@ -197,6 +221,10 @@ export async function PUT(request: Request) {
       adsTxtRaw?: string | null;
       adsenseSlotHero?: string | null;
       adsenseSlotContent?: string | null;
+      adsenseSlotArticle?: string | null;
+      adsenseArticleTopEnabled?: boolean;
+      adsenseArticleInlineEnabled?: boolean;
+      adsenseArticleBottomEnabled?: boolean;
       gscHtmlVerificationFileName?: string | null;
       gscHtmlVerificationFileBody?: string | null;
       gscExtraSiteVerificationMeta?: string | null;
@@ -609,6 +637,60 @@ export async function PUT(request: Request) {
       !Array.isArray(fuelVisibilityMap)
     ) {
       await patchFuelVisibilityMap(savedSettingsId, fuelVisibilityMap);
+    }
+
+    const wantsArticleAdsPatch =
+      adsenseSlotArticle !== undefined ||
+      typeof adsenseArticleTopEnabled === 'boolean' ||
+      typeof adsenseArticleInlineEnabled === 'boolean' ||
+      typeof adsenseArticleBottomEnabled === 'boolean';
+    if (wantsArticleAdsPatch) {
+      const slotArticle =
+        adsenseSlotArticle === undefined
+          ? null
+          : adsenseSlotArticle === null || String(adsenseSlotArticle).trim() === ''
+            ? null
+            : sanitizeAdSlot(String(adsenseSlotArticle).trim());
+      const current = await db.$queryRawUnsafe<
+        Array<{
+          adsenseSlotArticle: string | null;
+          adsenseArticleTopEnabled: number | null;
+          adsenseArticleInlineEnabled: number | null;
+          adsenseArticleBottomEnabled: number | null;
+        }>
+      >(
+        `SELECT adsenseSlotArticle, adsenseArticleTopEnabled, adsenseArticleInlineEnabled, adsenseArticleBottomEnabled
+         FROM SiteSettings WHERE id = ? LIMIT 1`,
+        savedSettingsId
+      );
+      const cur = current[0] ?? {
+        adsenseSlotArticle: null,
+        adsenseArticleTopEnabled: 0,
+        adsenseArticleInlineEnabled: 0,
+        adsenseArticleBottomEnabled: 0,
+      };
+      await db.$executeRawUnsafe(
+        `UPDATE SiteSettings
+         SET adsenseSlotArticle = ?, adsenseArticleTopEnabled = ?, adsenseArticleInlineEnabled = ?, adsenseArticleBottomEnabled = ?
+         WHERE id = ?`,
+        adsenseSlotArticle === undefined ? cur.adsenseSlotArticle : slotArticle,
+        typeof adsenseArticleTopEnabled === 'boolean'
+          ? adsenseArticleTopEnabled
+            ? 1
+            : 0
+          : Number(cur.adsenseArticleTopEnabled ?? 0) ? 1 : 0,
+        typeof adsenseArticleInlineEnabled === 'boolean'
+          ? adsenseArticleInlineEnabled
+            ? 1
+            : 0
+          : Number(cur.adsenseArticleInlineEnabled ?? 0) ? 1 : 0,
+        typeof adsenseArticleBottomEnabled === 'boolean'
+          ? adsenseArticleBottomEnabled
+            ? 1
+            : 0
+          : Number(cur.adsenseArticleBottomEnabled ?? 0) ? 1 : 0,
+        savedSettingsId
+      );
     }
 
     try {

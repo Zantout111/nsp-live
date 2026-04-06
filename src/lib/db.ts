@@ -93,6 +93,10 @@ export async function ensureSqliteSchema(): Promise<void> {
   await tryAlter(`ALTER TABLE SiteSettings ADD COLUMN adsTxtRaw TEXT`);
   await tryAlter(`ALTER TABLE SiteSettings ADD COLUMN adsenseSlotHero TEXT`);
   await tryAlter(`ALTER TABLE SiteSettings ADD COLUMN adsenseSlotContent TEXT`);
+  await tryAlter(`ALTER TABLE SiteSettings ADD COLUMN adsenseSlotArticle TEXT`);
+  await tryAlter(`ALTER TABLE SiteSettings ADD COLUMN adsenseArticleTopEnabled INTEGER NOT NULL DEFAULT 0`);
+  await tryAlter(`ALTER TABLE SiteSettings ADD COLUMN adsenseArticleInlineEnabled INTEGER NOT NULL DEFAULT 0`);
+  await tryAlter(`ALTER TABLE SiteSettings ADD COLUMN adsenseArticleBottomEnabled INTEGER NOT NULL DEFAULT 0`);
   await tryAlter(`ALTER TABLE SiteSettings ADD COLUMN gscHtmlVerificationFileName TEXT`);
   await tryAlter(`ALTER TABLE SiteSettings ADD COLUMN gscHtmlVerificationFileBody TEXT`);
   await tryAlter(`ALTER TABLE SiteSettings ADD COLUMN gscExtraSiteVerificationMeta TEXT`);

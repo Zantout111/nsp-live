@@ -934,7 +934,7 @@ export default function Home() {
               alt=""
               width={28}
               height={28}
-              className="h-6 w-6 shrink-0 rounded-sm object-contain sm:h-7 sm:w-7"
+              className="h-7 w-7 shrink-0 rounded-sm object-contain sm:h-8 sm:w-8"
             />
             <span className="truncate font-medium" title="XAU">
               {locale === 'ar' ? 'الذهب' : 'Gold'}
@@ -2109,6 +2109,12 @@ export default function Home() {
                   className="text-foreground/75 underline-offset-4 transition-colors hover:text-foreground hover:underline dark:text-slate-400 dark:hover:text-slate-200"
                 >
                   {t('footer.api')}
+                </Link>
+                <Link
+                  href="/articles"
+                  className="text-foreground/75 underline-offset-4 transition-colors hover:text-foreground hover:underline dark:text-slate-400 dark:hover:text-slate-200"
+                >
+                  {locale === 'ar' ? 'المقالات' : 'Articles'}
                 </Link>
               </nav>
             </div>
