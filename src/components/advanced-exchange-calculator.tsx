@@ -24,6 +24,9 @@ export interface AdvCurrencyRate {
 export interface AdvGoldPrice {
   priceUsd: number;
   pricePerGram: number;
+  pricePerGram21?: number | null;
+  pricePerGram18?: number | null;
+  pricePerGram14?: number | null;
 }
 
 export interface AdvFuelPrice {
@@ -50,13 +53,32 @@ export interface AdvCryptoRate {
 }
 
 type SourceCategory = 'syp' | 'currency' | 'gold' | 'fuel' | 'crypto' | 'forex';
-type GoldUnit = 'gram' | 'oz' | 'lira';
+type GoldUnit = 'gram' | 'gram21' | 'gram18' | 'gram14' | 'oz' | 'lira';
 type ForexAmountSide = 'base' | 'quote';
 
 function splitForexPair(pair: string): [string, string] | null {
   const p = pair.split('/').map((s) => s.trim().toUpperCase());
   if (p.length !== 2 || !p[0] || !p[1]) return null;
   return [p[0], p[1]];
+}
+
+function getGoldUnitLabel(unit: GoldUnit, locale: string, t: (key: string) => string): string {
+  switch (unit) {
+    case 'gram':
+      return t('calculator.advanced.goldGram');
+    case 'gram21':
+      return locale === 'ar' ? 'غرام ذهب (21 قيراط)' : 'Gold gram (21K)';
+    case 'gram18':
+      return locale === 'ar' ? 'غرام ذهب (18 قيراط)' : 'Gold gram (18K)';
+    case 'gram14':
+      return locale === 'ar' ? 'غرام ذهب (14 قيراط)' : 'Gold gram (14K)';
+    case 'oz':
+      return t('calculator.advanced.goldOz');
+    case 'lira':
+      return t('calculator.advanced.goldLira');
+    default:
+      return t('calculator.advanced.goldGram');
+  }
 }
 
 function sourceToSyp(params: {
@@ -92,6 +114,18 @@ function sourceToSyp(params: {
       if (!g || g.pricePerGram <= 0 || g.priceUsd <= 0) return null;
       const usdSell = usd.sellRate;
       if (params.goldUnit === 'gram') return amount * g.pricePerGram * usdSell;
+      if (params.goldUnit === 'gram21') {
+        const p = g.pricePerGram21 ?? 0;
+        return p > 0 ? amount * p * usdSell : null;
+      }
+      if (params.goldUnit === 'gram18') {
+        const p = g.pricePerGram18 ?? 0;
+        return p > 0 ? amount * p * usdSell : null;
+      }
+      if (params.goldUnit === 'gram14') {
+        const p = g.pricePerGram14 ?? 0;
+        return p > 0 ? amount * p * usdSell : null;
+      }
       if (params.goldUnit === 'oz') return amount * g.priceUsd * usdSell;
       return amount * g.pricePerGram * 8.5 * usdSell;
     }
@@ -185,6 +219,36 @@ function buildTargetRows(
         label: params.t('calculator.advanced.goldGram'),
         value: params.formatNumber(grams, 4, { noNewLira: true }) + ' g',
       });
+    }
+    if (params.selected.has('gold:gram21')) {
+      const p21 = (g.pricePerGram21 ?? 0) * usdSell;
+      if (p21 > 0) {
+        rows.push({
+          id: 'gold:gram21',
+          label: getGoldUnitLabel('gram21', params.locale, params.t),
+          value: params.formatNumber(syp / p21, 4, { noNewLira: true }) + ' g',
+        });
+      }
+    }
+    if (params.selected.has('gold:gram18')) {
+      const p18 = (g.pricePerGram18 ?? 0) * usdSell;
+      if (p18 > 0) {
+        rows.push({
+          id: 'gold:gram18',
+          label: getGoldUnitLabel('gram18', params.locale, params.t),
+          value: params.formatNumber(syp / p18, 4, { noNewLira: true }) + ' g',
+        });
+      }
+    }
+    if (params.selected.has('gold:gram14')) {
+      const p14 = (g.pricePerGram14 ?? 0) * usdSell;
+      if (p14 > 0) {
+        rows.push({
+          id: 'gold:gram14',
+          label: getGoldUnitLabel('gram14', params.locale, params.t),
+          value: params.formatNumber(syp / p14, 4, { noNewLira: true }) + ' g',
+        });
+      }
     }
     if (params.selected.has('gold:oz') && sypPerOz > 0) {
       const oz = syp / sypPerOz;
@@ -420,6 +484,14 @@ export function AdvancedExchangeCalculator({
   const allCurrencyIds = useMemo(() => rates.map((c) => `cur:${c.code}`), [rates]);
   const allFuelIds = useMemo(() => fuelPrices.map((f) => `fuel:${f.code}`), [fuelPrices]);
   const allCryptoIds = useMemo(() => cryptoRates.map((c) => `crypto:${c.code}`), [cryptoRates]);
+  const goldUnits = useMemo(() => {
+    const units: GoldUnit[] = ['gram'];
+    if ((goldPrice?.pricePerGram21 ?? 0) > 0) units.push('gram21');
+    if ((goldPrice?.pricePerGram18 ?? 0) > 0) units.push('gram18');
+    if ((goldPrice?.pricePerGram14 ?? 0) > 0) units.push('gram14');
+    units.push('oz', 'lira');
+    return units;
+  }, [goldPrice?.pricePerGram14, goldPrice?.pricePerGram18, goldPrice?.pricePerGram21]);
   const allFxIds = useMemo(
     () =>
       forexRates
@@ -499,9 +571,11 @@ export function AdvancedExchangeCalculator({
                 onChange={(e) => setGoldUnit(e.target.value as GoldUnit)}
                 className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm dark:border-slate-600 dark:bg-slate-900/80"
               >
-                <option value="gram">{t('calculator.advanced.goldGram')}</option>
-                <option value="oz">{t('calculator.advanced.goldOz')}</option>
-                <option value="lira">{t('calculator.advanced.goldLira')}</option>
+                {goldUnits.map((u) => (
+                  <option key={u} value={u}>
+                    {getGoldUnitLabel(u, locale, t)}
+                  </option>
+                ))}
               </select>
             </div>
           )}
@@ -687,7 +761,7 @@ export function AdvancedExchangeCalculator({
                 </button>
               </CollapsibleTrigger>
               <CollapsibleContent className="flex flex-wrap gap-4 border-t border-border/60 px-3 py-3 dark:border-white/10">
-                {(['gram', 'oz', 'lira'] as const).map((u) => {
+                {goldUnits.map((u) => {
                   const id = `gold:${u}`;
                   return (
                     <label key={id} className="flex cursor-pointer items-center gap-2 text-sm">
@@ -695,9 +769,7 @@ export function AdvancedExchangeCalculator({
                         checked={selectedTargets.has(id)}
                         onCheckedChange={(c) => toggleTarget(id, c === true)}
                       />
-                      {u === 'gram' && t('calculator.advanced.goldGram')}
-                      {u === 'oz' && t('calculator.advanced.goldOz')}
-                      {u === 'lira' && t('calculator.advanced.goldLira')}
+                      {getGoldUnitLabel(u, locale, t)}
                     </label>
                   );
                 })}

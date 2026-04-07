@@ -1,5 +1,5 @@
-/** ملف الشعار الافتراضي في `public` */
-export const DEFAULT_BRAND_LOGO = '/logo.svg';
+/** شعار افتراضي مضمون الوجود (route: /icon.svg من app/icon.svg) */
+export const DEFAULT_BRAND_LOGO = '/icon.svg';
 
 export type LogoSettingsSlice = {
   logoUrl?: string | null;

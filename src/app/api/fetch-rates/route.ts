@@ -149,6 +149,14 @@ export async function POST(request: Request) {
           where: { id: s.id },
           data: { lastFetchTime: new Date(), lastUpdate: new Date() },
         });
+        const cur = results.currencies;
+        if (cur?.ok && (cur.updated ?? 0) > 0) {
+          try {
+            await db.$executeRawUnsafe(`UPDATE SiteSettings SET manualRatesPinned = 0 WHERE id = ?`, s.id);
+          } catch {
+            // عمود اختياري في قواعد قديمة؛ لا نُفشل المزامنة بسببه.
+          }
+        }
       }
     }
 
@@ -156,6 +164,7 @@ export async function POST(request: Request) {
       success: anyOk,
       error: anyOk ? undefined : summarizeSyncFailures(results),
       message: anyOk ? 'Sync completed' : 'Sync finished with errors',
+      categories: toRun,
       results,
       lastFetchedAt: nextConfig.lastFetchedAt,
       fetchedAt: new Date().toISOString(),

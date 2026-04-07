@@ -100,6 +100,7 @@ export async function ensureSqliteSchema(): Promise<void> {
   await tryAlter(`ALTER TABLE SiteSettings ADD COLUMN gscHtmlVerificationFileName TEXT`);
   await tryAlter(`ALTER TABLE SiteSettings ADD COLUMN gscHtmlVerificationFileBody TEXT`);
   await tryAlter(`ALTER TABLE SiteSettings ADD COLUMN gscExtraSiteVerificationMeta TEXT`);
+  await tryAlter(`ALTER TABLE SiteSettings ADD COLUMN manualRatesPinned INTEGER NOT NULL DEFAULT 0`);
 
   sqliteSchemaEnsured = true;
 }

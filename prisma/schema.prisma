@@ -129,6 +129,8 @@ model SiteSettings {
   
   // إعدادات جلب الأسعار من SP Today
   autoUpdateEnabled Boolean  @default(true)   // تفعيل التحديث التلقائي
+  /// true عند تعديل سعر الصرف يدوياً مع تعطيل التحديث التلقائي (لإيقاف التذبذب)
+  manualRatesPinned Boolean  @default(false)
   updateInterval    Int      @default(6)      // فترة التحديث بالساعات
   adjustmentAmount  Int      @default(250)    // مبلغ التعديل (ليرة سورية)
   adjustmentType    String   @default("deduction") // نوع التعديل: deduction أو addition

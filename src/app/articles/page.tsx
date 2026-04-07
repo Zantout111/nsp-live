@@ -13,6 +13,14 @@ export default async function ArticlesPage() {
   const rows = await listPublishedArticles();
   return (
     <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <div className="mb-4">
+        <Link
+          href="/"
+          className="inline-flex items-center rounded-md border border-primary/30 bg-primary/10 px-3 py-1.5 text-sm font-semibold text-primary transition-colors hover:bg-primary/20"
+        >
+          العودة إلى الرئيسية
+        </Link>
+      </div>
       <section className="surface-card p-6">
         <h1 className="text-2xl font-bold text-foreground">المقالات</h1>
         <p className="mt-2 text-sm text-muted-foreground">
@@ -44,7 +52,7 @@ export default async function ArticlesPage() {
                   {a.publishedAt ? new Date(a.publishedAt).toLocaleDateString('ar') : ''}
                 </span>
                 <Link
-                  href={`/articles/${a.slug}`}
+                  href={`/articles/${encodeURIComponent(a.slug)}`}
                   className="rounded-md border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20"
                 >
                   قراءة المقال

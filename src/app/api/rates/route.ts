@@ -57,12 +57,18 @@ function displayRatesWithOscillation(
   buyStored: number,
   sellStored: number,
   code: string,
-  nowMs: number
+  nowMs: number,
+  enabled: boolean
 ): { buy: number; sell: number } {
   const b = Number(buyStored);
   const s = Number(sellStored);
   if (!Number.isFinite(b) || b <= 0) return { buy: 0, sell: 0 };
   if (!Number.isFinite(s) || s <= 0) return { buy: Math.round(b), sell: Math.round(b) };
+
+  // عند إلغاء السحب التلقائي (وضع يدوي)، اعرض الأسعار الثابتة دون أي تذبذب.
+  if (!enabled) {
+    return { buy: Math.round(b), sell: Math.round(s) };
+  }
 
   /** الليرة التركية: بدون تأرجح حول السعر المخزّن */
   if (code === 'TRY') {
@@ -74,17 +80,6 @@ function displayRatesWithOscillation(
   let sell = Math.max(1, Math.round(s + off));
   if (sell <= buy) sell = buy + Math.max(1, Math.round(s - b));
   return { buy, sell };
-}
-
-function smoothTowardTarget(prev: number | null, target: number): number {
-  if (!Number.isFinite(target) || target <= 0) return 0;
-  if (prev == null || !Number.isFinite(prev) || prev <= 0) return target;
-  const diff = target - prev;
-  if (diff === 0) return prev;
-  const maxStep = Math.max(15, Math.abs(prev) * 0.0035);
-  const signedStep = Math.sign(diff) * Math.min(Math.abs(diff), maxStep);
-  const softness = 0.72 + Math.random() * 0.2;
-  return Math.max(0, prev + signedStep * softness);
 }
 
 async function initializeDatabase() {
@@ -205,8 +200,10 @@ async function checkAutoUpdate() {
         }
 
         const t = Math.random();
-        buyRate = Math.max(0, rawBuy + (buyRate - rawBuy) * t);
-        sellRate = Math.max(0, rawSell + (sellRate - rawSell) * t);
+        const swungBuy = Math.max(0, rawBuy + (buyRate - rawBuy) * t);
+        const swungSell = Math.max(0, rawSell + (sellRate - rawSell) * t);
+        buyRate = Math.max(rawBuy, swungBuy);
+        sellRate = Math.max(rawSell, swungSell);
 
         if (!isNaN(buyRate) && !isNaN(sellRate) && buyRate > 0 && sellRate > 0) {
           rates.push({ code: currency, buyRate, sellRate });
@@ -218,12 +215,8 @@ async function checkAutoUpdate() {
     for (const rate of rates) {
       const currency = await db.currency.findFirst({ where: { code: rate.code } });
       if (currency) {
-        const prev = await db.exchangeRate.findFirst({
-          where: { currencyId: currency.id },
-          orderBy: { updatedAt: 'desc' },
-        });
-        const buyRate = smoothTowardTarget(prev?.buyRate ?? null, rate.buyRate);
-        const sellRate = smoothTowardTarget(prev?.sellRate ?? null, rate.sellRate);
+        const buyRate = rate.buyRate;
+        const sellRate = rate.sellRate;
         await upsertExchangeRateWithSnapshot(db, {
           currencyId: currency.id,
           buyRate,
@@ -236,6 +229,11 @@ async function checkAutoUpdate() {
     await db.siteSettings.updateMany({
       data: { lastFetchTime: new Date(), lastUpdate: new Date() },
     });
+    try {
+      await db.$executeRawUnsafe(`UPDATE SiteSettings SET manualRatesPinned = 0`);
+    } catch {
+      // عمود اختياري في قواعد قديمة
+    }
     
     console.log(`[Auto-Update] Completed. Updated ${rates.length} currencies.`);
   } catch (error) {
@@ -269,6 +267,17 @@ export async function GET(request: NextRequest) {
 
     // Get site settings
     const settings = await db.siteSettings.findFirst();
+    const manualPinned =
+      settings?.id != null
+        ? Number(
+            (
+              await db.$queryRawUnsafe<Array<{ manualRatesPinned: number | null }>>(
+                `SELECT manualRatesPinned FROM SiteSettings WHERE id = ? LIMIT 1`,
+                settings.id
+              )
+            )[0]?.manualRatesPinned ?? 0
+          ) > 0
+        : false;
     const footerTiktok =
       settings?.id != null ? await readFooterSocialTiktok(db, settings.id) : null;
 
@@ -289,7 +298,8 @@ export async function GET(request: NextRequest) {
         buyStored,
         sellStored,
         currency.code,
-        nowMs
+        nowMs,
+        !manualPinned
       );
       return {
         id: currency.id,

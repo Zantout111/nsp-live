@@ -33,6 +33,22 @@ export interface ScrapedCurrency {
   sellRate: number;
 }
 
+const FALLBACK_CURRENCY_CODES = [
+  'USD',
+  'EUR',
+  'TRY',
+  'SAR',
+  'AED',
+  'GBP',
+  'CHF',
+  'CAD',
+  'AUD',
+  'JOD',
+  'KWD',
+  'EGP',
+  'LYD',
+] as const;
+
 export async function fetchSpTodayHtml(url: string): Promise<string> {
   const res = await fetch(url, {
     headers: {
@@ -56,15 +72,37 @@ export async function fetchSpTodayHtml(url: string): Promise<string> {
 export function extractCurrencyRatesFromHTML(html: string): ScrapedCurrency[] {
   const rates: ScrapedCurrency[] = [];
   const seen = new Set<string>();
+  const toNum = (raw: string): number => {
+    const n = parseFloat(raw.replace(/,/g, ''));
+    if (!Number.isFinite(n) || n <= 0) return 0;
+    return Math.round(n);
+  };
   const re =
     /<span class="font-bold block">([A-Z]{3})<\/span>[\s\S]*?<span[^>]*class="[^"]*font-mono[^"]*font-bold[^"]*text-lg[^"]*"[^>]*>([\d,]+)<\/span>[\s\S]*?<span[^>]*class="[^"]*font-mono[^"]*font-bold[^"]*text-lg[^"]*"[^>]*>([\d,]+)<\/span>/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(html)) !== null) {
     const code = m[1];
     if (seen.has(code)) continue;
-    const buyRate = parseInt(m[2].replace(/,/g, ''), 10);
-    const sellRate = parseInt(m[3].replace(/,/g, ''), 10);
-    if (!isNaN(buyRate) && !isNaN(sellRate) && buyRate > 0 && sellRate > 0) {
+    const buyRate = toNum(m[2]);
+    const sellRate = toNum(m[3]);
+    if (buyRate > 0 && sellRate > 0) {
+      seen.add(code);
+      rates.push({ code, buyRate, sellRate });
+    }
+  }
+  // Fallback parse لكل كود على حدة (أكثر تحملاً لتغيرات بنية HTML).
+  for (const code of FALLBACK_CURRENCY_CODES) {
+    if (seen.has(code)) continue;
+    const esc = code.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const perCode = new RegExp(
+      `<span[^>]*>\\s*${esc}\\s*<\\/span>[\\s\\S]{0,2200}?<span[^>]*class="[^"]*font-mono[^"]*"[^>]*>([\\d,.]+)<\\/span>[\\s\\S]{0,900}?<span[^>]*class="[^"]*font-mono[^"]*"[^>]*>([\\d,.]+)<\\/span>`,
+      'i'
+    );
+    const mm = html.match(perCode);
+    if (!mm) continue;
+    const buyRate = toNum(mm[1]);
+    const sellRate = toNum(mm[2]);
+    if (buyRate > 0 && sellRate > 0) {
       seen.add(code);
       rates.push({ code, buyRate, sellRate });
     }
@@ -97,25 +135,13 @@ function applyPairWithRandomSwing(
     return adjusted;
   }
   const t = Math.random(); // نفس المعامل للشراء والبيع للحفاظ على شكل السبريد
+  // لا نسمح بالنزول تحت السعر الخام المسحوب من SP Today.
+  const swungBuy = Math.max(0, buy + dBuy * t);
+  const swungSell = Math.max(0, sell + dSell * t);
   return {
-    buy: Math.max(0, buy + dBuy * t),
-    sell: Math.max(0, sell + dSell * t),
+    buy: Math.max(buy, swungBuy),
+    sell: Math.max(sell, swungSell),
   };
-}
-
-/** حركة أبطأ وأكثر إقناعاً: خطوة تدريجية من السعر السابق نحو الهدف. */
-function smoothTowardTarget(prev: number | null, target: number): number {
-  if (!Number.isFinite(target) || target <= 0) return 0;
-  if (prev == null || !Number.isFinite(prev) || prev <= 0) return target;
-  const diff = target - prev;
-  if (diff === 0) return prev;
-
-  // سقف الحركة في كل دورة (حوالي 0.35% مع حد أدنى عددي).
-  const maxStep = Math.max(15, Math.abs(prev) * 0.0035);
-  const signedStep = Math.sign(diff) * Math.min(Math.abs(diff), maxStep);
-  // نعومة إضافية: لا نأخذ كامل الخطوة دائماً.
-  const softness = 0.72 + Math.random() * 0.2; // 72%..92%
-  return Math.max(0, prev + signedStep * softness);
 }
 
 /** سعر الغرام بالدولار من قسم International Prices على sp-today.com/en/gold */
@@ -249,20 +275,24 @@ export async function executeSpTodaySync(options: {
       if (rows.length === 0) {
         mark('currencies', { ok: false, message: 'No currency rows parsed' });
       } else {
-        rows = rows.map((row) => {
+        const prepared = rows.map((row) => {
           const swung = applyPairWithRandomSwing(row.buyRate, row.sellRate, c);
-          return { ...row, buyRate: swung.buy, sellRate: swung.sell };
+          return {
+            ...row,
+            targetBuy: swung.buy,
+            targetSell: swung.sell,
+            floorBuy: row.buyRate,
+            floorSell: row.sellRate,
+          };
         });
         let updated = 0;
-        for (const rate of rows) {
+        for (const rate of prepared) {
           const currency = await db.currency.findFirst({ where: { code: rate.code } });
           if (!currency) continue;
-          const prev = await db.exchangeRate.findFirst({
-            where: { currencyId: currency.id },
-            orderBy: { updatedAt: 'desc' },
-          });
-          const buyRate = smoothTowardTarget(prev?.buyRate ?? null, rate.buyRate);
-          const sellRate = smoothTowardTarget(prev?.sellRate ?? null, rate.sellRate);
+          // بعد أي تعديل يدوي سابق، يجب أن تعود المزامنة فوراً إلى السعر المسحوب
+          // (مع قيد: لا نزول تحت السعر الخام من SP Today).
+          const buyRate = Math.max(rate.floorBuy, rate.targetBuy);
+          const sellRate = Math.max(rate.floorSell, rate.targetSell);
           await upsertExchangeRateWithSnapshot(db, {
             currencyId: currency.id,
             buyRate,
@@ -270,7 +300,11 @@ export async function executeSpTodaySync(options: {
           });
           updated++;
         }
-        mark('currencies', { ok: true, updated, message: `${updated} عملات` });
+        mark('currencies', {
+          ok: updated > 0,
+          updated,
+          message: updated > 0 ? `${updated} عملات` : 'No mapped currencies updated',
+        });
       }
     } catch (e) {
       mark('currencies', { ok: false, message: String(e) });

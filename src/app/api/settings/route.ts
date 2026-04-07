@@ -87,6 +87,17 @@ export async function GET() {
         
         // Sync Settings
         autoUpdateEnabled: settings?.autoUpdateEnabled ?? true,
+        manualRatesPinned:
+          (settings?.id
+            ? Number(
+                (
+                  await db.$queryRawUnsafe<Array<{ manualRatesPinned: number | null }>>(
+                    `SELECT manualRatesPinned FROM SiteSettings WHERE id = ? LIMIT 1`,
+                    settings.id
+                  )
+                )[0]?.manualRatesPinned ?? 0
+              )
+            : 0) > 0,
         updateInterval: settings?.updateInterval ?? 6,
         adjustmentAmount: settings?.adjustmentAmount ?? 250,
         adjustmentType: settings?.adjustmentType ?? 'deduction',
@@ -455,6 +466,9 @@ export async function PUT(request: Request) {
         where: { id: settings.id },
         data: updateData,
       });
+      if (autoUpdateEnabled === true) {
+        await db.$executeRawUnsafe(`UPDATE SiteSettings SET manualRatesPinned = 0 WHERE id = ?`, settings.id);
+      }
       savedSettingsId = settings.id;
       if (footerSocialTiktok !== undefined) {
         await writeFooterSocialTiktok(db, settings.id, footerSocialTiktok);

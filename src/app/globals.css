@@ -940,3 +940,20 @@ html.dark .admin-panel {
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
+/* Article editor toolbar layout fixes:
+   keep all controls on one row with small gaps. */
+.article-editor-toolbar > * {
+  flex-shrink: 0;
+  width: auto;
+  max-width: none;
+}
+
+.article-editor-toolbar [class*='_toolbarGroupOfGroup_'],
+.article-editor-toolbar [class*='_toolbarToggleSingleGroup_'] {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  gap: 0.25rem !important;
+}

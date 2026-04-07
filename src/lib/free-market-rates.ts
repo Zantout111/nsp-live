@@ -172,15 +172,18 @@ function fromCache(codes: string[]): Map<string, CoinGeckoRow> {
   return out;
 }
 
-export async function fetchCoinGeckoForCodes(codes: string[]): Promise<Map<string, CoinGeckoRow>> {
+export async function fetchCoinGeckoForCodes(
+  codes: string[],
+  options?: { freshMs?: number; staleMs?: number }
+): Promise<Map<string, CoinGeckoRow>> {
   const reqCodes = [...new Set(codes.map((c) => String(c).toUpperCase()).filter(Boolean))];
   const map = new Map<string, CoinGeckoRow>();
   if (reqCodes.length === 0) return map;
 
   const cache = getCgCache();
   const now = Date.now();
-  const FRESH_MS = 5000;
-  const STALE_MS = 180000;
+  const FRESH_MS = Math.max(0, options?.freshMs ?? 5000);
+  const STALE_MS = Math.max(FRESH_MS, options?.staleMs ?? 180000);
   if (now - cache.at <= FRESH_MS) {
     return fromCache(reqCodes);
   }

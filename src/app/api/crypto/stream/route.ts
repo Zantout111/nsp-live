@@ -1,9 +1,12 @@
-import { getCryptoLiveSnapshot, onCryptoHubTick } from '@/lib/crypto-live-hub';
+import { getCryptoLiveSnapshot, onCryptoHubTick, restartCryptoBridge } from '@/lib/crypto-live-hub';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 export async function GET(request: Request) {
+  // ضمان تشغيل الجسر حتى لو لم تُنفّذ instrumentation (أو بعد إعادة تشغيل الخادم).
+  await restartCryptoBridge();
+
   const enc = new TextEncoder();
   const stream = new ReadableStream({
     start(controller) {

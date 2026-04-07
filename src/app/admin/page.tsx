@@ -476,7 +476,7 @@ export default function AdminPage() {
 
   const loadSettings = async () => {
     try {
-      const response = await fetch('/api/settings');
+      const response = await fetch(`/api/settings?ts=${Date.now()}`, { cache: 'no-store' });
       const result = await response.json();
       if (result.success) {
         setSyncSettings({
@@ -587,7 +587,7 @@ export default function AdminPage() {
 
   const fetchData = async () => {
     try {
-      const response = await fetch('/api/rates');
+      const response = await fetch(`/api/rates?ts=${Date.now()}`, { cache: 'no-store' });
       const result = await response.json();
       if (result.success) {
         setRates(result.data.rates);
@@ -618,7 +618,7 @@ export default function AdminPage() {
       }
       
       // Fetch fuel prices
-      const fuelResponse = await fetch('/api/fuel');
+      const fuelResponse = await fetch(`/api/fuel?ts=${Date.now()}`, { cache: 'no-store' });
       const fuelResult = await fuelResponse.json();
       if (fuelResult.success) {
         setFuelPrices(fuelResult.data);
@@ -630,7 +630,7 @@ export default function AdminPage() {
       }
       
       // Fetch forex rates
-      const forexResponse = await fetch('/api/forex');
+      const forexResponse = await fetch(`/api/forex?ts=${Date.now()}`, { cache: 'no-store' });
       const forexResult = await forexResponse.json();
       if (forexResult.success) {
         setForexRates(forexResult.data);
@@ -645,7 +645,7 @@ export default function AdminPage() {
       }
       
       // Fetch crypto rates
-      const cryptoResponse = await fetch('/api/crypto');
+      const cryptoResponse = await fetch(`/api/crypto?ts=${Date.now()}`, { cache: 'no-store' });
       const cryptoResult = await cryptoResponse.json();
       if (cryptoResult.success) {
         setCryptoRates(cryptoResult.data);
@@ -866,6 +866,17 @@ export default function AdminPage() {
   };
 
   const handleUpdateRate = async (currencyId: string) => {
+    if (syncSettings.autoUpdateEnabled) {
+      toast({
+        title: locale === 'ar' ? 'غير متاح' : 'Unavailable',
+        description:
+          locale === 'ar'
+            ? 'لا يمكن التعديل اليدوي أثناء تفعيل التحديث التلقائي. عطّل التحديث التلقائي أولاً.'
+            : 'Manual editing is disabled while auto update is enabled. Disable auto update first.',
+        variant: 'destructive',
+      });
+      return;
+    }
     const editRate = editingRates[currencyId];
     if (!editRate) return;
 
@@ -887,6 +898,14 @@ export default function AdminPage() {
           description: locale === 'ar' ? 'تم تحديث السعر بنجاح' : 'Rate updated successfully'
         });
         fetchData();
+      } else {
+        toast({
+          title: locale === 'ar' ? 'خطأ' : 'Error',
+          description:
+            result.error ||
+            (locale === 'ar' ? 'فشل في تحديث السعر' : 'Failed to update rate'),
+          variant: 'destructive',
+        });
       }
     } catch {
       toast({
@@ -1388,10 +1407,23 @@ export default function AdminPage() {
   const handleFetchFromSPToday = async () => {
     setIsFetching(true);
     try {
+      const cfg = resolvedSyncConfig();
+      const enabledNow = SYNC_TAB_CATEGORY_IDS.filter((id) => cfg.categories[id]?.enabled !== false);
+      if (enabledNow.length === 0) {
+        toast({
+          title: locale === 'ar' ? 'تنبيه' : 'Notice',
+          description:
+            locale === 'ar'
+              ? 'لا توجد فئات مفعّلة للجلب الآن. فعّل فئة واحدة على الأقل.'
+              : 'No enabled categories to fetch now. Enable at least one.',
+          variant: 'destructive',
+        });
+        return;
+      }
       const response = await fetch('/api/fetch-rates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: '{}',
+        body: JSON.stringify({ categories: enabledNow }),
       });
       const result = await response.json().catch(() => ({}));
 
@@ -1410,6 +1442,9 @@ export default function AdminPage() {
 
       if (result.success) {
         const res = result.results as Record<string, { ok?: boolean; updated?: number; message?: string }> | undefined;
+        const fetchedCategories = Array.isArray(result.categories)
+          ? (result.categories as string[]).join(', ')
+          : '';
         const summary =
           res &&
           Object.entries(res)
@@ -1419,11 +1454,10 @@ export default function AdminPage() {
         toast({
           title: locale === 'ar' ? 'تم الجلب' : 'Fetched',
           description:
-            summary ||
+            (summary ? `${summary}${fetchedCategories ? ` | ${fetchedCategories}` : ''}` : '') ||
             (locale === 'ar' ? 'اكتملت المزامنة' : 'Sync completed'),
         });
-        fetchData();
-        loadSettings();
+        await Promise.all([fetchData(), loadSettings()]);
       } else {
         toast({
           title: locale === 'ar' ? 'خطأ' : 'Error',
@@ -2120,6 +2154,13 @@ export default function AdminPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
+                {syncSettings.autoUpdateEnabled ? (
+                  <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
+                    {locale === 'ar'
+                      ? 'التعديل اليدوي لسعر الصرف مُعطّل أثناء تفعيل التحديث التلقائي. عطّل التحديث التلقائي من تبويب المزامنة أولاً.'
+                      : 'Manual exchange-rate editing is disabled while auto update is enabled. Disable it from Sync tab first.'}
+                  </div>
+                ) : null}
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                   {rates.map((currency, index) => (
                     <div
@@ -2140,6 +2181,7 @@ export default function AdminPage() {
                           <Input
                             type="number"
                             value={editingRates[currency.id]?.buyRate || '0'}
+                            disabled={syncSettings.autoUpdateEnabled}
                             onChange={(e) => setEditingRates({
                               ...editingRates,
                               [currency.id]: {
@@ -2155,6 +2197,7 @@ export default function AdminPage() {
                           <Input
                             type="number"
                             value={editingRates[currency.id]?.sellRate || '0'}
+                            disabled={syncSettings.autoUpdateEnabled}
                             onChange={(e) => setEditingRates({
                               ...editingRates,
                               [currency.id]: {
@@ -2170,6 +2213,7 @@ export default function AdminPage() {
                       <Button 
                         onClick={() => handleUpdateRate(currency.id)}
                         size="sm"
+                        disabled={syncSettings.autoUpdateEnabled}
                         className="w-full bg-green-600 hover:bg-green-700"
                       >
                         <Check className="w-4 h-4 ml-1" />

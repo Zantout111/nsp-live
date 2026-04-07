@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, ensureSqliteSchema } from '@/lib/db';
 import {
   upsertExchangeRateWithSnapshot,
   updateLatestGoldWithSnapshot,
@@ -44,6 +44,7 @@ export async function GET() {
 // POST - Update exchange rate for a currency
 export async function POST(request: NextRequest) {
   try {
+    await ensureSqliteSchema();
     const body = await request.json();
     const { currencyId, buyRate, sellRate } = body;
 
@@ -54,10 +55,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if rate exists
-    const existingRate = await db.exchangeRate.findUnique({
-      where: { currencyId }
-    });
+    const settings = await db.siteSettings.findFirst();
+    if (settings?.autoUpdateEnabled) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Manual rate editing is disabled while auto-sync is enabled',
+        },
+        { status: 409 }
+      );
+    }
 
     await upsertExchangeRateWithSnapshot(db, {
       currencyId,
@@ -69,6 +76,8 @@ export async function POST(request: NextRequest) {
     await db.siteSettings.updateMany({
       data: { lastUpdate: new Date() }
     });
+    // تم التعديل اليدوي مع إيقاف التحديث التلقائي => نثبّت السعر (إلغاء التذبذب).
+    await db.$executeRawUnsafe(`UPDATE SiteSettings SET manualRatesPinned = 1`);
 
     return NextResponse.json({
       success: true,

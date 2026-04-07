@@ -105,6 +105,14 @@ export async function runDueSyncCron(force: boolean): Promise<RunDueSyncResult> 
         ...(anyOk ? { lastFetchTime: new Date() } : {}),
       },
     });
+    const cur = results.currencies;
+    if (cur?.ok && (cur.updated ?? 0) > 0) {
+      try {
+        await db.$executeRawUnsafe(`UPDATE SiteSettings SET manualRatesPinned = 0 WHERE id = ?`, settings.id);
+      } catch {
+        // ignore on old schemas
+      }
+    }
   } else if (anyOk) {
     await db.siteSettings.create({
       data: {

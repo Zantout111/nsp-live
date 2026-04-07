@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useLocale } from 'next-intl';
@@ -12,8 +12,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, Check, RefreshCw, Save } from 'lucide-react';
+import { ArrowLeft, Check, RefreshCw, Save, Upload } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ArticleRichEditor } from '@/components/article-rich-editor';
 
 type ArticleRecord = {
   id: string;
@@ -149,10 +150,9 @@ export function AdminArticleEditor({ articleId }: { articleId?: string }) {
   const router = useRouter();
   const [loading, setLoading] = useState(Boolean(articleId));
   const [saving, setSaving] = useState(false);
+  const [uploadingFeatured, setUploadingFeatured] = useState(false);
   const [form, setForm] = useState<ArticleForm>(emptyForm());
-  const [imageAltQuick, setImageAltQuick] = useState('');
-  const [imageUrlQuick, setImageUrlQuick] = useState('');
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const featuredFileRef = useRef<HTMLInputElement | null>(null);
 
   const seo = useMemo(() => seoChecks(form), [form]);
 
@@ -228,29 +228,43 @@ export function AdminArticleEditor({ articleId }: { articleId?: string }) {
     }
   }
 
-  function wrapSelection(prefix: string, suffix = '') {
-    const el = textareaRef.current;
-    if (!el) return;
-    const start = el.selectionStart;
-    const end = el.selectionEnd;
-    const before = form.content.slice(0, start);
-    const selected = form.content.slice(start, end);
-    const after = form.content.slice(end);
-    const next = `${before}${prefix}${selected || ''}${suffix}${after}`;
-    setForm((p) => ({ ...p, content: next }));
-    requestAnimationFrame(() => {
-      el.focus();
-      const cursor = start + prefix.length + (selected ? selected.length : 0);
-      el.setSelectionRange(cursor, cursor);
+  async function uploadImage(file: File): Promise<string> {
+    const fd = new FormData();
+    fd.append('file', file);
+    const res = await fetch('/api/admin/upload-article-image', {
+      method: 'POST',
+      body: fd,
+      credentials: 'include',
     });
+    const json = (await res.json().catch(() => ({}))) as { success?: boolean; url?: string; error?: string };
+    if (!res.ok || !json.success || !json.url) {
+      throw new Error(json.error || 'Upload failed');
+    }
+    return json.url;
   }
 
-  function insertImage() {
-    const alt = imageAltQuick.trim() || 'image';
-    const url = imageUrlQuick.trim();
-    if (!url) return;
-    wrapSelection(`![${alt}](${url})`);
-    setImageUrlQuick('');
+  async function onFeaturedFilePicked(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setUploadingFeatured(true);
+    try {
+      const url = await uploadImage(file);
+      setForm((p) => ({ ...p, featuredImageUrl: url }));
+      toast({
+        title: locale === 'ar' ? 'تم الرفع' : 'Uploaded',
+        description: locale === 'ar' ? 'تم رفع الصورة البارزة' : 'Featured image uploaded',
+      });
+    } catch (err) {
+      toast({
+        title: locale === 'ar' ? 'خطأ' : 'Error',
+        description: locale === 'ar' ? 'فشل رفع الصورة' : 'Image upload failed',
+        variant: 'destructive',
+      });
+      console.error(err);
+    } finally {
+      setUploadingFeatured(false);
+    }
   }
 
   if (loading) {
@@ -329,10 +343,32 @@ export function AdminArticleEditor({ articleId }: { articleId?: string }) {
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <Label>{locale === 'ar' ? 'الصورة البارزة' : 'Featured image URL'}</Label>
-                <Input
-                  value={form.featuredImageUrl}
-                  onChange={(e) => setForm((p) => ({ ...p, featuredImageUrl: e.target.value }))}
-                  placeholder="https://..."
+                <div className="flex gap-2">
+                  <Input
+                    value={form.featuredImageUrl}
+                    onChange={(e) => setForm((p) => ({ ...p, featuredImageUrl: e.target.value }))}
+                    placeholder="https://... /uploads/..."
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => featuredFileRef.current?.click()}
+                    disabled={uploadingFeatured}
+                  >
+                    {uploadingFeatured ? (
+                      <RefreshCw className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Upload className="h-4 w-4" />
+                    )}
+                    <span className="ms-1">{locale === 'ar' ? 'رفع' : 'Upload'}</span>
+                  </Button>
+                </div>
+                <input
+                  ref={featuredFileRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/jpg,image/webp,image/gif,image/svg+xml"
+                  className="hidden"
+                  onChange={onFeaturedFilePicked}
                 />
               </div>
               <div className="space-y-2">
@@ -342,27 +378,16 @@ export function AdminArticleEditor({ articleId }: { articleId?: string }) {
             </div>
 
             <div className="space-y-2">
-              <Label>{locale === 'ar' ? 'محرر المحتوى (Markdown)' : 'Content editor (Markdown)'}</Label>
-              <div className="flex flex-wrap gap-2">
-                <Button type="button" size="sm" variant="outline" onClick={() => wrapSelection('\n# ')}>H1</Button>
-                <Button type="button" size="sm" variant="outline" onClick={() => wrapSelection('\n## ')}>H2</Button>
-                <Button type="button" size="sm" variant="outline" onClick={() => wrapSelection('\n### ')}>H3</Button>
-                <Button type="button" size="sm" variant="outline" onClick={() => wrapSelection('\n#### ')}>H4</Button>
-                <Button type="button" size="sm" variant="outline" onClick={() => wrapSelection('\n\n')}>P</Button>
-              </div>
-              <div className="grid gap-2 md:grid-cols-[1fr,1fr,auto]">
-                <Input value={imageAltQuick} onChange={(e) => setImageAltQuick(e.target.value)} placeholder={locale === 'ar' ? 'alt للصورة' : 'image alt'} />
-                <Input value={imageUrlQuick} onChange={(e) => setImageUrlQuick(e.target.value)} placeholder="https://image-url" />
-                <Button type="button" variant="outline" onClick={insertImage}>
-                  {locale === 'ar' ? 'إضافة صورة' : 'Insert image'}
-                </Button>
-              </div>
-              <Textarea
-                ref={textareaRef}
-                rows={18}
-                value={form.content}
-                onChange={(e) => setForm((p) => ({ ...p, content: e.target.value }))}
-                className="font-mono text-sm"
+              <Label>{locale === 'ar' ? 'محرر المحتوى المرئي' : 'Visual content editor'}</Label>
+              <p className="text-xs text-muted-foreground">
+                {locale === 'ar'
+                  ? 'اختر نوع الفقرة من القائمة: H1/H2/H3/H4. لإلغاء العنوان وإرجاع النص عادي اختر Paragraph (P).'
+                  : 'Use block type picker for H1/H2/H3/H4. To remove heading and return to normal text choose Paragraph (P).'}
+              </p>
+              <ArticleRichEditor
+                markdown={form.content}
+                onChange={(value) => setForm((p) => ({ ...p, content: value }))}
+                onUploadImage={uploadImage}
               />
             </div>
 

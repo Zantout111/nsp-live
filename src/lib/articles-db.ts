@@ -156,11 +156,32 @@ export async function listPublishedArticleSlugs(): Promise<string[]> {
 
 export async function getPublishedArticleBySlug(slug: string): Promise<ArticleRecord | null> {
   await ensureArticlesTable();
-  const rows = await db.$queryRawUnsafe<SqlArticleRow[]>(
-    `SELECT * FROM Article WHERE slug = ? AND isPublished = 1 LIMIT 1`,
-    slug
-  );
-  return rows[0] ? mapRow(rows[0]) : null;
+  const raw = String(slug ?? '');
+  const candidates = new Set<string>();
+  const add = (v: string) => {
+    const x = String(v ?? '').trim();
+    if (x) candidates.add(x);
+  };
+  add(raw);
+  try {
+    add(decodeURIComponent(raw));
+  } catch {
+    /* ignore malformed encoding */
+  }
+  try {
+    add(decodeURI(raw));
+  } catch {
+    /* ignore malformed encoding */
+  }
+
+  for (const c of candidates) {
+    const rows = await db.$queryRawUnsafe<SqlArticleRow[]>(
+      `SELECT * FROM Article WHERE slug = ? AND isPublished = 1 LIMIT 1`,
+      c
+    );
+    if (rows[0]) return mapRow(rows[0]);
+  }
+  return null;
 }
 
 export async function listAdminArticles(): Promise<ArticleRecord[]> {

@@ -8,6 +8,8 @@ import { NextIntlClientProvider } from 'next-intl';
 import { getMessages } from 'next-intl/server';
 import { cookies } from 'next/headers';
 import { getAdsenseLayoutData } from "@/lib/adsense-layout-data";
+import { db, ensureSqliteSchema } from '@/lib/db';
+import { DEFAULT_BRAND_LOGO, pickLogoStorageUrl } from '@/lib/resolve-logo-url';
 
 const cairo = Cairo({
   variable: "--font-cairo",
@@ -19,6 +21,11 @@ const cairo = Cairo({
 const defaultMetadata: Metadata = {
   title: "سعر الليرة السورية | Syrian Pound Exchange Rate",
   description: "أحدث أسعار صرف الليرة السورية مقابل العملات الأجنبية وأسعار الذهب",
+  icons: {
+    icon: "/icon.svg",
+    shortcut: "/icon.svg",
+    apple: "/icon.svg",
+  },
   keywords: [
     "سعر الليرة اليوم",
     "سعر الليرة السورية",
@@ -32,10 +39,50 @@ const defaultMetadata: Metadata = {
 };
 
 export async function generateMetadata(): Promise<Metadata> {
+  await ensureSqliteSchema();
+  const cookieStore = await cookies();
+  const locale = cookieStore.get('locale')?.value || 'ar';
+  const settings = await db.siteSettings.findFirst({
+    select: { logoUrl: true, logoUrlAr: true, logoUrlNonAr: true },
+  });
+  const picked = pickLogoStorageUrl(locale, settings);
+  const iconUrl = (() => {
+    const raw = (picked || DEFAULT_BRAND_LOGO).trim();
+    if (!raw) return '/icon.svg';
+    if (raw.startsWith('/')) return raw;
+    try {
+      const u = new URL(raw);
+      const loopback =
+        u.hostname === 'localhost' ||
+        u.hostname === '127.0.0.1' ||
+        u.hostname === '[::1]' ||
+        u.hostname === '::1' ||
+        u.hostname === '0.0.0.0' ||
+        u.hostname.endsWith('.localhost');
+      return loopback ? `${u.pathname}${u.search}` : raw;
+    } catch {
+      return '/icon.svg';
+    }
+  })();
+
   const { verificationGoogle } = await getAdsenseLayoutData();
-  if (!verificationGoogle) return defaultMetadata;
+  if (!verificationGoogle) {
+    return {
+      ...defaultMetadata,
+      icons: {
+        icon: iconUrl,
+        shortcut: iconUrl,
+        apple: iconUrl,
+      },
+    };
+  }
   return {
     ...defaultMetadata,
+    icons: {
+      icon: iconUrl,
+      shortcut: iconUrl,
+      apple: iconUrl,
+    },
     verification: { google: verificationGoogle },
   };
 }

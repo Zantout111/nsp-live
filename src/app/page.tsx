@@ -27,7 +27,12 @@ import {
 } from 'lucide-react';
 import { numberingLatn } from '@/lib/intl-latn';
 import { DEFAULT_LOGO_SIZES, parseLogoSizes, type LogoSizes } from '@/lib/logo-sizes';
-import { DEFAULT_BRAND_LOGO, resolveLogoForLocale, resolveLogoUrlForClient } from '@/lib/resolve-logo-url';
+import {
+  DEFAULT_BRAND_LOGO,
+  pickLogoStorageUrl,
+  resolveLogoForLocale,
+  resolveLogoUrlForClient,
+} from '@/lib/resolve-logo-url';
 import { PriceShareButton } from '@/components/price-share-button';
 import { FooterSocialLinks, footerSocialHasAny } from '@/components/footer-social-links';
 import { AdvancedExchangeCalculator } from '@/components/advanced-exchange-calculator';
@@ -380,6 +385,7 @@ export default function Home() {
   /** fetching: جلب (نفس شاشة المقدمة مع الشعار) | intro: خروج المقدمة | main */
   const [phase, setPhase] = useState<'fetching' | 'intro' | 'main'>('fetching');
   const [introExiting, setIntroExiting] = useState(false);
+  const [introLogoFailed, setIntroLogoFailed] = useState(false);
   const initialFetchCompleted = useRef(false);
   /** شاشة المقدمة: قيمة ابتدائية حتى يظهر الشعار الافتراضي فوراً (مهم للوصول عبر IP/شبكة بطيئة) */
   const [bootIdentity, setBootIdentity] = useState<{
@@ -934,7 +940,7 @@ export default function Home() {
               alt=""
               width={28}
               height={28}
-              className="h-7 w-7 shrink-0 rounded-sm object-contain sm:h-8 sm:w-8"
+              className="h-6 w-6 shrink-0 rounded-sm object-contain sm:h-7 sm:w-7"
             />
             <span className="truncate font-medium" title="XAU">
               {locale === 'ar' ? 'الذهب' : 'Gold'}
@@ -993,7 +999,12 @@ export default function Home() {
     bootIdentity?.logoSizes.loading ??
     parseLogoSizes(data?.siteSettings?.logoSizes).loading ??
     DEFAULT_LOGO_SIZES.loading;
-  const introLogoSrc = resolveLogoForLocale(locale, bootIdentity);
+  const introLogoRaw = pickLogoStorageUrl(locale, bootIdentity);
+  const introLogoSrc = introLogoRaw ? resolveLogoUrlForClient(introLogoRaw) : null;
+
+  useEffect(() => {
+    setIntroLogoFailed(false);
+  }, [introLogoSrc]);
 
   return (
     <>
@@ -1014,17 +1025,20 @@ export default function Home() {
               style={{ minHeight: introLh + 16, minWidth: introLh + 16 }}
             >
               {/* eslint-disable-next-line @next/next/no-img-element — شاشة المقدمة؛ مسار افتراضي logo.svg */}
-              <img
-                key={introLogoSrc}
-                src={introLogoSrc}
-                alt=""
-                width={240}
-                height={80}
-                decoding="async"
-                fetchPriority="high"
-                className="block rounded-lg object-contain"
-                style={{ height: introLh, width: 'auto', maxWidth: 200 }}
-              />
+              {!introLogoFailed && introLogoSrc ? (
+                <img
+                  key={introLogoSrc}
+                  src={introLogoSrc}
+                  alt=""
+                  width={240}
+                  height={80}
+                  decoding="async"
+                  fetchPriority="high"
+                  onError={() => setIntroLogoFailed(true)}
+                  className="block rounded-lg object-contain"
+                  style={{ height: introLh, width: 'auto', maxWidth: 200 }}
+                />
+              ) : null}
             </div>
             <p className="text-sm text-muted-foreground dark:text-white/70">{t('site.description')}</p>
           </div>
@@ -1734,7 +1748,12 @@ export default function Home() {
                   {locale === 'ar' ? 'أسعار المحروقات' : 'Fuel Prices'}
                 </CardTitle>
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                  {data?.fuelPrices.map((fuel) => (
+                  {data?.fuelPrices.map((fuel) => {
+                    const fuelUsd =
+                      usd && Number.isFinite(usd.buyRate) && usd.buyRate > 0
+                        ? fuel.price / usd.buyRate
+                        : null;
+                    return (
                     <div
                       key={fuel.id}
                       className="relative flex items-center justify-between gap-2 rounded-lg border border-border bg-muted/40 pt-11 dark:border-slate-700 dark:bg-slate-800/40 pe-3 pb-4 ps-4"
@@ -1750,12 +1769,19 @@ export default function Home() {
                             rows={[
                               {
                                 label: getFuelUnit(fuel),
-                                value: `${formatNumber(fuel.price)} ${getCurrencySymbol()}`,
+                                value:
+                                  fuelUsd != null
+                                    ? `$${formatUsd(fuelUsd, 3)}`
+                                    : `${formatNumber(fuel.price)} ${getCurrencySymbol()}`,
                                 tone: 'neutral',
                               },
                             ]}
                             fileNameSlug={`fuel-${fuel.code}`}
-                            detailLine={`${getFuelName(fuel)}: ${formatNumber(fuel.price)} ${getCurrencySymbol()}`}
+                            detailLine={
+                              fuelUsd != null
+                                ? `${getFuelName(fuel)}: $${formatUsd(fuelUsd, 3)} (≈ ${formatNumber(fuel.price)} ${getCurrencySymbol()})`
+                                : `${getFuelName(fuel)}: ${formatNumber(fuel.price)} ${getCurrencySymbol()}`
+                            }
                           />
                         </div>
                       )}
@@ -1769,14 +1795,19 @@ export default function Home() {
                         </div>
                       </div>
                       <div className="shrink-0 text-end">
-                        <p className="text-2xl font-bold text-primary dark:text-blue-400">{formatNumber(fuel.price)}</p>
-                        <p className="text-xs text-muted-foreground">{getCurrencySymbol()}</p>
+                        <p className="text-2xl font-bold text-primary dark:text-blue-400">
+                          {fuelUsd != null ? `$${formatUsd(fuelUsd, 3)}` : '---'}
+                        </p>
+                        <p className="text-xs text-muted-foreground">USD</p>
+                        <p className="mt-0.5 text-sm text-muted-foreground">
+                          ≈ {formatNumber(fuel.price)} {getCurrencySymbol()}
+                        </p>
                         <div className="mt-1 flex justify-end">
                           <RateDeltaBadge pct={fuel.changePct} />
                         </div>
                       </div>
                     </div>
-                  ))}
+                  )})}
                 </div>
               </div>
             </TabsContent>
