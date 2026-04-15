@@ -71,4 +71,5 @@ extracted/
 **/ios/Pods/
 **/ios/.symlinks/
 
+# Archives (local backups)
 project.zip
