@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr" class="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Syrian Pound Today | Currency &amp; Gold Rates (UI clone)</title>
+    <meta
+      name="description"
+      content="Static front-end inspired by sp-today.com — demo rates only, not live data."
+    />
+    <link rel="stylesheet" href="css/styles.css" />
+    <script src="js/app.js" defer></script>
+  </head>
+  <body class="layout-body">
+    <a href="#main-content" class="skip-link">Skip to content</a>
+    <header class="header-overlay">
+      <nav class="shell header-nav" aria-label="Main">
+        <div class="header-row">
+          <a class="brand" href="#" aria-label="SPToday home">
+            <img src="images/logo.svg" alt="SPToday" class="brand-logo" width="40" height="40" />
+          </a>
+          <div class="nav-desktop">
+            <a href="#rates">Exchange Rates</a>
+            <a href="#gold">Gold</a>
+            <a href="#silver">Silver</a>
+            <a href="https://sp-today.com/en/crypto" target="_blank" rel="noopener">Crypto</a>
+            <a href="#energy">Energy</a>
+            <a href="https://sp-today.com/en/portfolio" target="_blank" rel="noopener">Portfolio</a>
+            <a href="#news">News</a>
+          </div>
+          <div class="nav-tools">
+            <a class="lang-switch" href="#" aria-label="Switch to Arabic">عربي</a>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <div class="ticker-bar" role="region" aria-label="Rate tickers">
+      <div class="shell ticker-scroll">
+        <div class="ticker-item"><span class="ticker-pair">USD/SYP</span><span class="ticker-val">12,315</span></div>
+        <div class="ticker-item"><span class="ticker-pair">EUR/SYP</span><span class="ticker-val">14,060</span></div>
+        <div class="ticker-item"><span class="ticker-pair">TRY/SYP</span><span class="ticker-val">275</span></div>
+        <div class="ticker-item"><span class="ticker-pair">SAR/SYP</span><span class="ticker-val">3,240</span></div>
+        <div class="ticker-item"><span class="ticker-pair">AED/SYP</span><span class="ticker-val">3,309</span></div>
+        <div class="ticker-item"><span class="ticker-pair">EGP/SYP</span><span class="ticker-val">231</span></div>
+      </div>
+    </div>
+
+    <main id="main-content" class="main-grow">
+      <div class="page-stack">
+        <section class="hero-gradient hero-section" aria-labelledby="hero-usd-title">
+          <div class="shell hero-inner">
+            <div class="region-block">
+              <button type="button" class="region-select" aria-haspopup="listbox" aria-expanded="false">
+                <svg class="icon-sm text-dim" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span>General</span>
+                <svg class="icon-sm text-dim" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+            </div>
+
+            <div class="hero-split">
+              <a
+                class="hero-primary block-link"
+                href="https://sp-today.com/en/currency/us-dollar"
+                target="_blank"
+                rel="noopener"
+              >
+                <div class="hero-primary-head">
+                  <img
+                    src="images/flags/usd-hero.svg"
+                    alt=""
+                    width="56"
+                    height="40"
+                    class="flag-rounded flag-hero"
+                  />
+                  <div>
+                    <h1 id="hero-usd-title" class="hero-primary-title">US Dollar Rate</h1>
+                    <p class="hero-primary-sub">General</p>
+                  </div>
+                </div>
+                <div class="hero-primary-rates">
+                  <div class="hero-rate-line">
+                    <span class="hero-big-nums tabular-nums">
+                      <span>12,280</span><span class="hero-dash">-</span><span>12,350</span>
+                    </span>
+                    <span class="hero-syp-label">SYP</span>
+                  </div>
+                  <p class="hero-buy-sell">Buy - Sell</p>
+                </div>
+                <div class="hero-primary-foot">
+                  <span class="pill-green"><span class="tabular-nums">↑ +0.00%</span></span>
+                  <span class="hero-extra muted-text">-</span>
+                </div>
+              </a>
+
+              <div class="hero-mini-grid">
+                <a class="hero-mini" href="https://sp-today.com/en/currency/euro" target="_blank" rel="noopener">
+                  <div class="hero-mini-head">
+                    <img src="images/flags/eur.svg" alt="" width="32" height="24" class="flag-rounded" />
+                    <span class="hero-mini-code">EUR</span>
+                  </div>
+                  <div class="hero-mini-price tabular-nums">14,060</div>
+                  <span class="hero-mini-chg text-emerald">+0.00%</span>
+                </a>
+                <a class="hero-mini" href="https://sp-today.com/en/currency/turkish-lira" target="_blank" rel="noopener">
+                  <div class="hero-mini-head">
+                    <img src="images/flags/try.svg" alt="" width="32" height="24" class="flag-rounded" />
+                    <span class="hero-mini-code">TRY</span>
+                  </div>
+                  <div class="hero-mini-price tabular-nums">275</div>
+                  <span class="hero-mini-chg text-emerald">+0.00%</span>
+                </a>
+                <a class="hero-mini" href="https://sp-today.com/en/currency/saudi-riyal" target="_blank" rel="noopener">
+                  <div class="hero-mini-head">
+                    <img src="images/flags/sar.svg" alt="" width="32" height="24" class="flag-rounded" />
+                    <span class="hero-mini-code">SAR</span>
+                  </div>
+                  <div class="hero-mini-price tabular-nums">3,240</div>
+                  <span class="hero-mini-chg text-emerald">+0.00%</span>
+                </a>
+                <a class="hero-mini" href="https://sp-today.com/en/currency/egyptian-pound" target="_blank" rel="noopener">
+                  <div class="hero-mini-head">
+                    <img src="images/flags/egp.svg" alt="" width="32" height="24" class="flag-rounded" />
+                    <span class="hero-mini-code">EGP</span>
+                  </div>
+                  <div class="hero-mini-price tabular-nums">231</div>
+                  <span class="hero-mini-chg text-emerald">+0.00%</span>
+                </a>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="rates" class="section">
+        <div class="container">
+          <div class="section-header">
+            <h2 class="section-title">Current Rates</h2>
+            <a class="section-link" href="https://sp-today.com/en/currencies" target="_blank" rel="noopener"
+              >View all currencies →</a
+            >
+          </div>
+          <div class="table-wrap">
+            <table class="rates-table">
+              <thead>
+                <tr>
+                  <th>Currency</th>
+                  <th>Buy</th>
+                  <th>Sell</th>
+                  <th>Change</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="cur"><span>USD</span> US Dollar</td>
+                  <td>12,280</td>
+                  <td>12,350</td>
+                  <td class="change-up">+0.00%</td>
+                </tr>
+                <tr>
+                  <td class="cur"><span>EUR</span> Euro</td>
+                  <td>14,060</td>
+                  <td>14,260</td>
+                  <td class="change-up">+0.00%</td>
+                </tr>
+                <tr>
+                  <td class="cur"><span>TRY</span> Turkish Lira</td>
+                  <td>275</td>
+                  <td>278</td>
+                  <td class="change-up">+0.00%</td>
+                </tr>
+                <tr>
+                  <td class="cur"><span>SAR</span> Saudi Riyal</td>
+                  <td>3,240</td>
+                  <td>3,292</td>
+                  <td class="change-up">+0.00%</td>
+                </tr>
+                <tr>
+                  <td class="cur"><span>AED</span> UAE Dirham</td>
+                  <td>3,309</td>
+                  <td>3,362</td>
+                  <td class="change-up">+0.00%</td>
+                </tr>
+                <tr>
+                  <td class="cur"><span>EGP</span> Egyptian Pound</td>
+                  <td>231</td>
+                  <td>234</td>
+                  <td class="change-up">+0.00%</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section id="gold" class="section" style="background: var(--surface)">
+        <div class="container">
+          <div class="section-header gold">
+            <h2 class="section-title">Gold Prices</h2>
+            <a class="section-link" href="https://sp-today.com/en/gold" target="_blank" rel="noopener"
+              >View all →</a
+            >
+          </div>
+          <div class="gold-spot">
+            <h3>Gold Ounce (XAU)</h3>
+            <p class="big">$4,411.87 <span style="font-size: 0.9rem; color: #059669">+0.71%</span></p>
+            <p style="font-size: 0.8125rem; color: #92400e; margin-top: 0.35rem">24h change (demo)</p>
+          </div>
+          <div class="gold-grid">
+            <article class="rate-card rate-card-gold">
+              <code style="color: var(--gold)">24K</code>
+              <p class="name">USD/g · Buy (SYP) · Sell (SYP)</p>
+              <p class="price">$141.73 · 1,741,900 — 1,762,900</p>
+            </article>
+            <article class="rate-card rate-card-gold">
+              <code style="color: var(--gold)">21K</code>
+              <p class="name">USD/g · Buy (SYP) · Sell (SYP)</p>
+              <p class="price">$124.01 · 1,524,100 — 1,542,500</p>
+            </article>
+            <article class="rate-card rate-card-gold">
+              <code style="color: var(--gold)">18K</code>
+              <p class="name">USD/g · Buy (SYP) · Sell (SYP)</p>
+              <p class="price">$106.30 · 1,306,400 — 1,322,200</p>
+            </article>
+            <article class="rate-card rate-card-gold">
+              <code style="color: var(--gold)">14K</code>
+              <p class="name">USD/g · Buy (SYP) · Sell (SYP)</p>
+              <p class="price">$82.67 · 1,016,000 — 1,028,300</p>
+            </article>
+          </div>
+          <p style="font-size: 0.875rem; color: var(--muted); margin-top: 1rem">Prices in General (demo labels)</p>
+
+          <div class="section-header gold" style="margin-top: 2.5rem">
+            <h2 class="section-title">Silver</h2>
+            <a class="section-link" href="https://sp-today.com/en/silver" target="_blank" rel="noopener"
+              >View all →</a
+            >
+          </div>
+          <div
+            id="silver"
+            class="gold-spot silver-spot"
+            style="background: linear-gradient(135deg, #312e81 0%, #1e1b4b 100%); border-color: #6366f1"
+          >
+            <h3 class="silver-spot-title">Silver Ounce (XAG)</h3>
+            <p class="big silver-spot-price">$68.89 <span class="silver-spot-chg">+1.09%</span></p>
+          </div>
+        </div>
+      </section>
+
+      <section id="news" class="section">
+        <div class="container">
+          <div class="section-header">
+            <h2 class="section-title">Economic News</h2>
+            <a class="section-link" href="https://sp-today.com/en/news" target="_blank" rel="noopener"
+              >All news →</a
+            >
+          </div>
+          <div class="news-list">
+            <article class="news-item">
+              <h3>
+                <a href="https://sp-today.com/en/news/limited-new-currency-circulation-syria" target="_blank" rel="noopener"
+                  >Why Does the New Currency’s Circulation Remain Limited in Syrian Markets?</a
+                >
+              </h3>
+              <time datetime="2026-01-29">01/29/2026, 11:02 AM</time>
+            </article>
+            <article class="news-item">
+              <h3>
+                <a href="https://sp-today.com/en/news/syria-oil-fields-a-new-chapter-begins" target="_blank" rel="noopener"
+                  >Syria's Oil Fields: A New Chapter Begins</a
+                >
+              </h3>
+              <time datetime="2026-01-19">01/19/2026, 04:30 PM</time>
+            </article>
+            <article class="news-item">
+              <h3>
+                <a
+                  href="https://sp-today.com/en/news/black-gold-revives-syrian-lira"
+                  target="_blank"
+                  rel="noopener"
+                  >Black Gold Revives the Lira: Syrian Currency Rises as Oil Fields Return</a
+                >
+              </h3>
+              <time datetime="2026-01-18">01/18/2026, 07:25 PM</time>
+            </article>
+            <article class="news-item">
+              <h3>
+                <a href="https://sp-today.com/en/news/sptoday-relaunch-2026" target="_blank" rel="noopener"
+                  >SPToday Relaunches with New Website and Mobile App</a
+                >
+              </h3>
+              <time datetime="2026-01-03">01/03/2026, 10:17 PM</time>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" style="background: var(--surface)">
+        <div class="container">
+          <div class="section-header">
+            <h2 class="section-title">Global FX</h2>
+          </div>
+          <div class="stats-strip">
+            <div>
+              <p class="label">EUR/USD</p>
+              <p class="val">1.1531</p>
+            </div>
+            <div>
+              <p class="label">GBP/USD</p>
+              <p class="val">1.3331</p>
+            </div>
+            <div>
+              <p class="label">USD/TRY</p>
+              <p class="val">44.3454</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="energy" class="section">
+        <div class="container two-col">
+          <div>
+            <div class="section-header">
+              <h2 class="section-title">Fuel Prices</h2>
+              <a class="section-link" href="https://sp-today.com/en/energy" target="_blank" rel="noopener"
+                >View all →</a
+              >
+            </div>
+            <div class="fuel-grid">
+              <article class="fuel-card">
+                <p class="emoji" aria-hidden="true">⛽</p>
+                <p class="title">Gasoline</p>
+                <p class="detail">$0.85 / liter · 10,500 SYP</p>
+              </article>
+              <article class="fuel-card">
+                <p class="emoji" aria-hidden="true">🛢️</p>
+                <p class="title">Diesel</p>
+                <p class="detail">$0.75 / liter · 9,260 SYP</p>
+              </article>
+              <article class="fuel-card">
+                <p class="emoji" aria-hidden="true">🔵</p>
+                <p class="title">LPG Gas</p>
+                <p class="detail">$10.50 / kg · 129,680 SYP</p>
+              </article>
+            </div>
+          </div>
+          <div>
+            <div class="section-header">
+              <h2 class="section-title">Electricity Tariffs</h2>
+            </div>
+            <table class="elec-table">
+              <thead>
+                <tr>
+                  <th>Tier</th>
+                  <th>Price</th>
+                  <th>Unit</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>1 · Houses (&lt; 300 kWh)</td>
+                  <td>600</td>
+                  <td>SYP/kWh</td>
+                </tr>
+                <tr>
+                  <td>2 · Houses (&gt; 300 kWh)</td>
+                  <td>1,400</td>
+                  <td>SYP/kWh</td>
+                </tr>
+                <tr>
+                  <td>3 · Industrial</td>
+                  <td>1,400</td>
+                  <td>SYP/kWh</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="container">
+          <div class="app-cta">
+            <h2>Download Our App</h2>
+            <p>Get live rates on your mobile device</p>
+            <div class="app-btns">
+              <a href="https://apps.apple.com/us/app/%D8%A7%D9%84%D9%84%D9%8A%D8%B1%D8%A9-%D8%A7%D9%84%D9%8A%D9%88%D9%85/id1038805293" target="_blank" rel="noopener">App Store</a>
+              <a href="https://play.google.com/store/apps/details?id=com.sptoday" target="_blank" rel="noopener">Google Play</a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" style="background: var(--surface); padding-bottom: 3rem">
+        <div class="container" style="max-width: 36rem">
+          <div class="section-header">
+            <h2 class="section-title">Currency Converter</h2>
+          </div>
+          <div class="converter-box">
+            <div class="toggle-row">
+              <button type="button" class="active">Buy</button>
+              <button type="button">Sell</button>
+            </div>
+            <div class="field">
+              <label for="from-cur">From</label>
+              <select id="from-cur" name="from">
+                <option>US Dollar (USD)</option>
+                <option>Euro (EUR)</option>
+                <option>Syrian Pound (SYP)</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="amount">Amount</label>
+              <input id="amount" type="text" inputmode="decimal" value="100" />
+            </div>
+            <div class="field">
+              <label for="to-cur">To</label>
+              <select id="to-cur" name="to">
+                <option>Syrian Pound (SYP)</option>
+                <option>US Dollar (USD)</option>
+                <option>Euro (EUR)</option>
+              </select>
+            </div>
+            <p style="font-size: 0.875rem; color: var(--muted)">Static UI only — hook to your API for real conversion.</p>
+          </div>
+        </div>
+      </section>
+      </div>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container">
+        <p>
+          UI clone for local development — design tokens inspired by
+          <a href="https://sp-today.com/en/" target="_blank" rel="noopener" style="color: var(--primary)">sp-today.com</a>.
+          Numbers and sections are illustrative; use the official site for live data.
+        </p>
+        <p class="disclaimer">
+          Respect intellectual property: this is not affiliated with SP Today. Replace branding and content if you publish
+          your own product.
+        </p>
+      </div>
+    </footer>
+  </body>
+</html>
