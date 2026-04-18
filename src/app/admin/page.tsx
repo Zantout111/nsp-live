@@ -1,0 +1,4706 @@
+'use client';
+
+import { useState, useEffect, useCallback, useMemo, type CSSProperties } from 'react';
+import { useTheme } from 'next-themes';
+import { useRouter } from 'next/navigation';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Separator } from '@/components/ui/separator';
+import { Switch } from '@/components/ui/switch';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Slider } from '@/components/ui/slider';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Textarea } from '@/components/ui/textarea';
+import { useToast } from '@/hooks/use-toast';
+import { ThemeToggle } from '@/components/theme-toggle';
+import { LanguageSwitcher } from '@/components/language-switcher';
+import { useTranslations, useLocale } from 'next-intl';
+import { numberingLatn } from '@/lib/intl-latn';
+import { DEFAULT_LOGO_SIZES, parseLogoSizes, type LogoSizes } from '@/lib/logo-sizes';
+import { resolveLogoUrlForClient } from '@/lib/resolve-logo-url';
+import { AdminArticlesTab } from '@/components/admin-articles-tab';
+import { AdminAnalyticsTab } from '@/components/admin-analytics-tab';
+import type { SyncCategoryId, SyncConfigV1, CategorySyncConfig } from '@/lib/sync-config';
+import { SYNC_CATEGORY_IDS, defaultSyncConfigV1 } from '@/lib/sync-config';
+import { DEFAULT_MARKET_SYMBOL_ROWS } from '@/lib/finnhub-types';
+import { cn } from '@/lib/utils';
+import { applySiteBrandCssVars, getSiteBrandCssVariables } from '@/lib/theme-from-brand';
+import type { HeroSectionThemeStored, HeroThemeSide } from '@/lib/hero-section-theme';
+import {
+  mergeHeroSide,
+  isHeroThemeEqualToDefaults,
+  sanitizeHeroSectionThemeForSave,
+} from '@/lib/hero-section-theme';
+import { 
+  RefreshCw, 
+  Coins, 
+  Settings,
+  Check,
+  Clock,
+  Shield,
+  Lock,
+  LogOut,
+  AlertCircle,
+  Sparkles,
+  Download,
+  TrendingDown,
+  TrendingUp,
+  Palette,
+  Image as ImageIcon,
+  Globe,
+  Paintbrush,
+  Fuel,
+  DollarSign,
+  Gauge,
+  Code,
+  Share2,
+  Zap,
+  Trash2,
+  Plus,
+  Loader2,
+  FlaskConical,
+  Bitcoin,
+  Megaphone,
+  PanelLeft,
+  PanelRight,
+  Copy,
+  FileSearch,
+  BarChart3,
+  RotateCcw,
+} from 'lucide-react';
+
+interface CurrencyRate {
+  id: string;
+  code: string;
+  nameAr: string;
+  nameEn: string;
+  symbol: string | null;
+  flagEmoji: string | null;
+  buyRate: number;
+  sellRate: number;
+  lastUpdated: string | null;
+}
+
+interface GoldPriceData {
+  priceUsd: number;
+  pricePerGram: number;
+  pricePerGram21?: number | null;
+  pricePerGram18?: number | null;
+  pricePerGram14?: number | null;
+  lastUpdated: string;
+}
+
+interface SyncSettings {
+  autoUpdateEnabled: boolean;
+  updateInterval: number;
+  adjustmentAmount: number;
+  adjustmentType: 'deduction' | 'addition';
+  lastFetchTime: string | null;
+}
+
+/** ما يظهر في تبويب المزامنة (بدون فوركس وعملات رقمية) */
+const SYNC_TAB_CATEGORY_IDS: SyncCategoryId[] = ['currencies', 'gold', 'fuel'];
+
+const SYNC_CATEGORY_LABEL: Record<SyncCategoryId, { ar: string; en: string; hintAr: string; hintEn: string }> = {
+  currencies: {
+    ar: 'العملات',
+    en: 'Currencies',
+    hintAr: 'سعر شراء/بيع بالليرة من صفحة العملات',
+    hintEn: 'Buy/sell SYP from currencies page',
+  },
+  gold: {
+    ar: 'الذهب',
+    en: 'Gold',
+    hintAr: 'أونصة و24K و21K و18K و14K بالدولار من صفحة الذهب',
+    hintEn: 'Ounce, 24K & 21/18/14K USD/gram from gold page',
+  },
+  fuel: {
+    ar: 'المحروقات',
+    en: 'Fuel',
+    hintAr: 'بنزين/ديزل/غاز من صفحة الطاقة (ل.س)',
+    hintEn: 'Gasoline/diesel/LPG from energy (SYP)',
+  },
+  crypto: {
+    ar: 'العملات الرقمية',
+    en: 'Cryptocurrencies',
+    hintAr: 'CoinGecko (مجاني) أو احتياطي SP Today',
+    hintEn: 'CoinGecko (free) or SP Today fallback',
+  },
+  forex: {
+    ar: 'البورصات العالمية',
+    en: 'Global markets',
+    hintAr: 'Finnhub/Frankfurter + احتياط Yahoo للسلع (من الخادم)',
+    hintEn: 'Finnhub/Frankfurter + Yahoo fallback for commodities (server-side)',
+  },
+};
+
+const FINNHUB_SYMBOL_DEFAULTS = DEFAULT_MARKET_SYMBOL_ROWS;
+
+const MARKET_ASSET_EMOJI: Record<string, string> = {
+  'asset-gold': '🥇',
+  'asset-silver': '🥈',
+  'asset-oil': '🛢️',
+  'asset-gas': '🔥',
+  'asset-sugar': '🍬',
+  'asset-rice': '🌾',
+};
+
+function adminForexPairTitle(fx: ForexRateData, loc: string): string {
+  if (loc === 'ar') return String(fx.nameAr ?? '').trim() || fx.pair;
+  return String(fx.nameEn ?? '').trim() || fx.pair;
+}
+
+function MarketBadge({ code }: { code: string }) {
+  const c = String(code || '').toLowerCase();
+  const emoji = MARKET_ASSET_EMOJI[c];
+  if (emoji) {
+    return (
+      <span className="inline-flex w-5 h-3.5 items-center justify-center rounded-sm border border-background bg-background/60 text-[10px] shadow-sm">
+        {emoji}
+      </span>
+    );
+  }
+  return (
+    <img
+      src={`https://flagcdn.com/w40/${c}.png`}
+      alt={c}
+      className="w-5 h-3.5 object-cover rounded-sm border border-background shadow-sm"
+    />
+  );
+}
+
+const CRYPTO_RT_DEFAULT_CODES = ['BTC', 'ETH', 'SOL'];
+
+interface SiteIdentity {
+  siteName: string;
+  siteNameAr: string;
+  siteNameEn: string;
+  heroSubtitle: string;
+  heroSubtitleAr: string;
+  heroSubtitleEn: string;
+  /** احتياطي قديم — يُستخدم إن لم يُضبط شعار العربية أو باقي اللغات */
+  logoUrl: string | null;
+  logoUrlAr: string | null;
+  logoUrlNonAr: string | null;
+  logoSizes: LogoSizes;
+  /** مدة دورة شريط الأسعار فوق الترويسة (ثوانٍ؛ أقل = حركة أسرع) */
+  tickerMarqueeDurationSec: number;
+  footerSocialFacebook: string;
+  footerSocialX: string;
+  footerSocialTelegram: string;
+  footerSocialInstagram: string;
+  footerSocialYoutube: string;
+  footerSocialTiktok: string;
+}
+
+interface VisualIdentity {
+  lightPrimaryColor: string;
+  lightAccentColor: string;
+  lightBgColor: string;
+  darkPrimaryColor: string;
+  darkAccentColor: string;
+  darkBgColor: string;
+  /** null = استخدام التدرج والنص الافتراضيين لقسم الهيرو */
+  heroSectionTheme: HeroSectionThemeStored | null;
+}
+
+const DEFAULT_VISUAL_IDENTITY: VisualIdentity = {
+  lightPrimaryColor: '#0ea5e9',
+  lightAccentColor: '#0284c7',
+  lightBgColor: '#ffffff',
+  darkPrimaryColor: '#0ea5e9',
+  darkAccentColor: '#38bdf8',
+  darkBgColor: '#0f172a',
+  heroSectionTheme: null,
+};
+
+interface FuelPriceData {
+  id: string;
+  code: string;
+  nameAr: string;
+  nameEn: string;
+  price: number;
+  unitAr: string;
+  unitEn: string;
+  lastUpdated: string;
+}
+
+interface ForexRateData {
+  id: string;
+  pair: string;
+  nameAr: string;
+  nameEn: string;
+  rate: number;
+  change: number;
+  flag1: string;
+  flag2: string;
+  lastUpdated: string;
+}
+
+interface CryptoRateData {
+  id: string;
+  code: string;
+  nameAr: string;
+  nameEn: string;
+  price: number;
+  change: number;
+  icon: string | null;
+  lastUpdated: string;
+}
+
+type FuelVisibilityMap = Record<string, boolean>;
+
+interface ApiAccessRequestRow {
+  id: string;
+  fullName: string;
+  email: string;
+  phone: string;
+  websiteName: string;
+  websiteUrl: string;
+  usagePurpose: string;
+  programmingType: string;
+  receiptImageUrl: string | null;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  adminNote: string | null;
+  createdAt: string;
+}
+
+type FinnhubSymbolTestRow = {
+  finnhubSymbol: string;
+  pair: string;
+  httpStatus?: number;
+  finnhubStatus?: string;
+  lastClose?: number | null;
+  candleCount?: number;
+  error?: string | null;
+  fallbackClose?: number | null;
+  fallbackSource?: 'frankfurter' | 'yahoo' | null;
+};
+
+type FinnhubTestApiResponse = {
+  success: boolean;
+  error?: string;
+  configured?: { enabled: boolean; hasKey: boolean; symbolCount: number };
+  websocket?: { open: boolean };
+  rest?: { ok: boolean; message?: string };
+  perSymbol?: FinnhubSymbolTestRow[];
+};
+
+type CryptoLiveTestRow = { code: string; ok: boolean; price: number | null; change: number | null };
+type CryptoLiveTestResponse = {
+  success: boolean;
+  error?: string;
+  configured?: { enabled: boolean; codeCount: number };
+  result?: { ok: boolean; message?: string };
+  rows?: CryptoLiveTestRow[];
+};
+
+interface ApiAllowedDomainRow {
+  id: string;
+  domain: string;
+  enabled: boolean;
+  expiresAt: string | null;
+  requestId: string | null;
+  note: string | null;
+  request: {
+    id: string;
+    fullName: string;
+    email: string;
+    websiteUrl: string;
+  } | null;
+}
+
+export default function AdminPage() {
+  const router = useRouter();
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [isNewLira, setIsNewLira] = useState(false);
+  const [activeTab, setActiveTab] = useState('rates');
+  
+  const [rates, setRates] = useState<CurrencyRate[]>([]);
+  const [goldPrice, setGoldPrice] = useState<GoldPriceData | null>(null);
+  const [editingRates, setEditingRates] = useState<Record<string, { buyRate: string; sellRate: string }>>({});
+  const [goldInput, setGoldInput] = useState({
+    priceUsd: '',
+    pricePerGram: '',
+    pricePerGram21: '',
+    pricePerGram18: '',
+    pricePerGram14: '',
+  });
+  const [refreshing, setRefreshing] = useState(false);
+  
+  // Sync Settings
+  const [syncSettings, setSyncSettings] = useState<SyncSettings>({
+    autoUpdateEnabled: true,
+    updateInterval: 6,
+    adjustmentAmount: 250,
+    adjustmentType: 'deduction',
+    lastFetchTime: null
+  });
+  
+  // Site Identity
+  const [siteIdentity, setSiteIdentity] = useState<SiteIdentity>({
+    siteName: 'سعر الليرة السورية',
+    siteNameAr: 'سعر الليرة السورية',
+    siteNameEn: 'Syrian Pound Exchange Rate',
+    heroSubtitle: 'أسعار الصرف الحية',
+    heroSubtitleAr: 'أسعار الصرف الحية',
+    heroSubtitleEn: 'Live Exchange Rates',
+    logoUrl: null,
+    logoUrlAr: null,
+    logoUrlNonAr: null,
+    logoSizes: { ...DEFAULT_LOGO_SIZES },
+    tickerMarqueeDurationSec: 42,
+    footerSocialFacebook: '',
+    footerSocialX: '',
+    footerSocialTelegram: '',
+    footerSocialInstagram: '',
+    footerSocialYoutube: '',
+    footerSocialTiktok: '',
+  });
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  
+  // Visual Identity
+  const [visualIdentity, setVisualIdentity] = useState<VisualIdentity>({ ...DEFAULT_VISUAL_IDENTITY });
+  
+  const [isFetching, setIsFetching] = useState(false);
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [fullSync, setFullSync] = useState<SyncConfigV1 | null>(null);
+  
+  // Fuel, Forex, Crypto States
+  const [fuelPrices, setFuelPrices] = useState<FuelPriceData[]>([]);
+  const [forexRates, setForexRates] = useState<ForexRateData[]>([]);
+  const [cryptoRates, setCryptoRates] = useState<CryptoRateData[]>([]);
+  const [editingFuel, setEditingFuel] = useState<Record<string, string>>({});
+  const [fuelVisibilityMap, setFuelVisibilityMap] = useState<FuelVisibilityMap>({});
+  const [savingFuelVisibility, setSavingFuelVisibility] = useState(false);
+  const [editingForex, setEditingForex] = useState<Record<string, { rate: string; change: string }>>({});
+  const [editingCrypto, setEditingCrypto] = useState<Record<string, { price: string; change: string }>>({});
+  const [finnhubForm, setFinnhubForm] = useState({
+    realtimeEnabled: false,
+    apiKeyInput: '',
+    finnhubApiKeySet: false,
+    clearApiKey: false,
+    symbolRows: FINNHUB_SYMBOL_DEFAULTS,
+  });
+  const [savingFinnhub, setSavingFinnhub] = useState(false);
+  const [finnhubTestLoading, setFinnhubTestLoading] = useState(false);
+  const [finnhubTestResult, setFinnhubTestResult] = useState<FinnhubTestApiResponse | null>(null);
+  const [cryptoLiveForm, setCryptoLiveForm] = useState<{ enabled: boolean; codes: string[] }>({
+    enabled: false,
+    codes: CRYPTO_RT_DEFAULT_CODES,
+  });
+  const [savingCryptoLive, setSavingCryptoLive] = useState(false);
+  const [cryptoLiveTestLoading, setCryptoLiveTestLoading] = useState(false);
+  const [cryptoLiveTestResult, setCryptoLiveTestResult] = useState<CryptoLiveTestResponse | null>(null);
+
+  const [adsenseForm, setAdsenseForm] = useState({
+    enabled: false,
+    publisherId: '',
+    adsTxtRaw: '',
+    slotHero: '',
+    slotContent: '',
+    slotArticle: '',
+    articleTopEnabled: false,
+    articleInlineEnabled: false,
+    articleBottomEnabled: false,
+  });
+  const [savingAdsense, setSavingAdsense] = useState(false);
+
+  const [searchConsoleForm, setSearchConsoleForm] = useState({
+    siteVerificationMeta: '',
+    htmlFileName: '',
+    htmlFileBody: '',
+    extraMeta: '',
+  });
+  const [savingSearchConsole, setSavingSearchConsole] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [publicOrigin, setPublicOrigin] = useState('');
+
+  const [apiAccessLoading, setApiAccessLoading] = useState(false);
+  const [apiRequests, setApiRequests] = useState<ApiAccessRequestRow[]>([]);
+  const [apiDomains, setApiDomains] = useState<ApiAllowedDomainRow[]>([]);
+  const [platformApiUsdtTrc20, setPlatformApiUsdtTrc20] = useState('');
+  const [platformApiSubscriptionPriceUsd, setPlatformApiSubscriptionPriceUsd] = useState('50');
+  const [platformApiSubscriptionDays, setPlatformApiSubscriptionDays] = useState('365');
+  const [savingUsdtWallet, setSavingUsdtWallet] = useState(false);
+  const [newManualDomain, setNewManualDomain] = useState('');
+  const [approveDomainDraft, setApproveDomainDraft] = useState<Record<string, string>>({});
+
+  const { toast } = useToast();
+  const t = useTranslations();
+  const locale = useLocale();
+  const { resolvedTheme } = useTheme();
+
+  const publicThemePreviewLight = useMemo(
+    () => getSiteBrandCssVariables('light', visualIdentity),
+    [visualIdentity]
+  );
+  const publicThemePreviewDark = useMemo(
+    () => getSiteBrandCssVariables('dark', visualIdentity),
+    [visualIdentity]
+  );
+
+  const heroLightPreview = useMemo(
+    () => mergeHeroSide('light', visualIdentity.heroSectionTheme),
+    [visualIdentity.heroSectionTheme]
+  );
+  const heroDarkPreview = useMemo(
+    () => mergeHeroSide('dark', visualIdentity.heroSectionTheme),
+    [visualIdentity.heroSectionTheme]
+  );
+
+  const patchHeroLight = useCallback((patch: Partial<HeroThemeSide>) => {
+    setVisualIdentity((v) => ({
+      ...v,
+      heroSectionTheme: {
+        ...(v.heroSectionTheme ?? {}),
+        light: { ...(v.heroSectionTheme?.light ?? {}), ...patch },
+      },
+    }));
+  }, []);
+
+  const patchHeroDark = useCallback((patch: Partial<HeroThemeSide>) => {
+    setVisualIdentity((v) => ({
+      ...v,
+      heroSectionTheme: {
+        ...(v.heroSectionTheme ?? {}),
+        dark: { ...(v.heroSectionTheme?.dark ?? {}), ...patch },
+      },
+    }));
+  }, []);
+
+  const checkAuth = useCallback(async () => {
+    try {
+      const response = await fetch('/api/auth');
+      const result = await response.json();
+      setIsAuthenticated(result.authenticated);
+      if (result.authenticated) {
+        fetchData();
+        loadSettings();
+      }
+    } catch {
+      setIsAuthenticated(false);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    checkAuth();
+  }, [checkAuth]);
+
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem('adminSidebarCollapsed');
+      if (v === '1') setSidebarCollapsed(true);
+    } catch {
+      /* ignore */
+    }
+    if (typeof window !== 'undefined') {
+      setPublicOrigin(window.location.origin);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab !== 'api' || !isAuthenticated) return;
+    let cancelled = false;
+    (async () => {
+      setApiAccessLoading(true);
+      try {
+        const r = await fetch('/api/admin/api-access');
+        const j = await r.json();
+        if (!cancelled && j.success) {
+          setApiRequests(j.requests as ApiAccessRequestRow[]);
+          setApiDomains(j.domains as ApiAllowedDomainRow[]);
+        }
+      } finally {
+        if (!cancelled) setApiAccessLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, isAuthenticated]);
+
+  const loadSettings = async () => {
+    try {
+      const response = await fetch(`/api/settings?ts=${Date.now()}`, { cache: 'no-store' });
+      const result = await response.json();
+      if (result.success) {
+        setSyncSettings({
+          autoUpdateEnabled: result.settings.autoUpdateEnabled,
+          updateInterval: result.settings.updateInterval,
+          adjustmentAmount: result.settings.adjustmentAmount,
+          adjustmentType: result.settings.adjustmentType,
+          lastFetchTime: result.settings.lastFetchTime
+        });
+        if (result.settings.syncConfig) {
+          setFullSync(result.settings.syncConfig as SyncConfigV1);
+        }
+        setSiteIdentity({
+          siteName: result.settings.siteName,
+          siteNameAr: result.settings.siteNameAr || result.settings.siteName,
+          siteNameEn: result.settings.siteNameEn || 'Syrian Pound Exchange Rate',
+          heroSubtitle: result.settings.heroSubtitle || 'أسعار الصرف الحية',
+          heroSubtitleAr: result.settings.heroSubtitleAr || 'أسعار الصرف الحية',
+          heroSubtitleEn: result.settings.heroSubtitleEn || 'Live Exchange Rates',
+          logoUrl: result.settings.logoUrl ?? null,
+          logoUrlAr: result.settings.logoUrlAr ?? null,
+          logoUrlNonAr: result.settings.logoUrlNonAr ?? null,
+          logoSizes: parseLogoSizes(result.settings.logoSizes),
+          tickerMarqueeDurationSec: Math.min(
+            180,
+            Math.max(8, Number(result.settings.tickerMarqueeDurationSec) || 42)
+          ),
+          footerSocialFacebook: result.settings.footerSocialFacebook ?? '',
+          footerSocialX: result.settings.footerSocialX ?? '',
+          footerSocialTelegram: result.settings.footerSocialTelegram ?? '',
+          footerSocialInstagram: result.settings.footerSocialInstagram ?? '',
+          footerSocialYoutube: result.settings.footerSocialYoutube ?? '',
+          footerSocialTiktok: result.settings.footerSocialTiktok ?? '',
+        });
+        setVisualIdentity({
+          lightPrimaryColor: result.settings.lightPrimaryColor || '#0ea5e9',
+          lightAccentColor: result.settings.lightAccentColor || '#0284c7',
+          lightBgColor: result.settings.lightBgColor || '#ffffff',
+          darkPrimaryColor: result.settings.darkPrimaryColor || '#0ea5e9',
+          darkAccentColor: result.settings.darkAccentColor || '#38bdf8',
+          darkBgColor: result.settings.darkBgColor || '#0f172a',
+          heroSectionTheme:
+            (result.settings.heroSectionTheme as HeroSectionThemeStored | null | undefined) ?? null,
+        });
+        setPlatformApiUsdtTrc20(result.settings.platformApiUsdtTrc20 ?? '');
+        const p = result.settings.platformApiSubscriptionPriceUsd;
+        setPlatformApiSubscriptionPriceUsd(
+          p !== undefined && p !== null && Number.isFinite(Number(p)) ? String(p) : '50'
+        );
+        const d = result.settings.platformApiSubscriptionDays;
+        setPlatformApiSubscriptionDays(
+          d !== undefined && d !== null && Number.isFinite(Number(d)) ? String(Math.round(Number(d))) : '365'
+        );
+        const rows = result.settings.finnhubForexSymbolRows as { finnhubSymbol: string; pair: string }[] | undefined;
+        setFinnhubForm((prev) => ({
+          ...prev,
+          realtimeEnabled: Boolean(result.settings.forexRealtimeEnabled),
+          finnhubApiKeySet: Boolean(result.settings.finnhubApiKeySet),
+          apiKeyInput: '',
+          clearApiKey: false,
+          symbolRows:
+            Array.isArray(rows) && rows.length > 0
+              ? rows.map((r) => ({
+                  finnhubSymbol: String(r.finnhubSymbol ?? '').trim(),
+                  pair: String(r.pair ?? '').trim(),
+                }))
+              : FINNHUB_SYMBOL_DEFAULTS,
+        }));
+        const codes = Array.isArray(result.settings.cryptoRealtimeCodes)
+          ? (result.settings.cryptoRealtimeCodes as unknown[])
+              .map((x) => String(x ?? '').trim().toUpperCase())
+              .filter(Boolean)
+          : [];
+        setCryptoLiveForm({
+          enabled: Boolean(result.settings.cryptoRealtimeEnabled),
+          codes: codes.length > 0 ? codes : CRYPTO_RT_DEFAULT_CODES,
+        });
+        setAdsenseForm({
+          enabled: Boolean(result.settings.adsenseEnabled),
+          publisherId: result.settings.adsensePublisherId ?? '',
+          adsTxtRaw: result.settings.adsTxtRaw ?? '',
+          slotHero: result.settings.adsenseSlotHero ?? '',
+          slotContent: result.settings.adsenseSlotContent ?? '',
+          slotArticle: result.settings.adsenseSlotArticle ?? '',
+          articleTopEnabled: Boolean(result.settings.adsenseArticleTopEnabled),
+          articleInlineEnabled: Boolean(result.settings.adsenseArticleInlineEnabled),
+          articleBottomEnabled: Boolean(result.settings.adsenseArticleBottomEnabled),
+        });
+        setSearchConsoleForm({
+          siteVerificationMeta: result.settings.adsenseSiteVerification ?? '',
+          htmlFileName: result.settings.gscHtmlVerificationFileName ?? '',
+          htmlFileBody: result.settings.gscHtmlVerificationFileBody ?? '',
+          extraMeta: result.settings.gscExtraSiteVerificationMeta ?? '',
+        });
+        const visRaw = result.settings.fuelVisibilityMap;
+        const next: FuelVisibilityMap = {};
+        if (visRaw && typeof visRaw === 'object' && !Array.isArray(visRaw)) {
+          for (const [k, v] of Object.entries(visRaw as Record<string, unknown>)) {
+            const code = String(k ?? '').trim().toUpperCase();
+            if (!code) continue;
+            next[code] = Boolean(v);
+          }
+        }
+        setFuelVisibilityMap(next);
+      }
+    } catch (error) {
+      console.error('Error fetching settings:', error);
+    }
+  };
+
+  const fetchData = async () => {
+    try {
+      const response = await fetch(`/api/rates?ts=${Date.now()}`, { cache: 'no-store' });
+      const result = await response.json();
+      if (result.success) {
+        setRates(result.data.rates);
+        setGoldPrice(result.data.goldPrice);
+        
+        const editRates: Record<string, { buyRate: string; sellRate: string }> = {};
+        result.data.rates.forEach((rate: CurrencyRate) => {
+          editRates[rate.id] = {
+            buyRate: rate.buyRate.toString(),
+            sellRate: rate.sellRate.toString()
+          };
+        });
+        setEditingRates(editRates);
+        
+        if (result.data.goldPrice) {
+          const gp = result.data.goldPrice;
+          setGoldInput({
+            priceUsd: gp.priceUsd.toString(),
+            pricePerGram: gp.pricePerGram.toString(),
+            pricePerGram21:
+              gp.pricePerGram21 != null && gp.pricePerGram21 > 0 ? String(gp.pricePerGram21) : '',
+            pricePerGram18:
+              gp.pricePerGram18 != null && gp.pricePerGram18 > 0 ? String(gp.pricePerGram18) : '',
+            pricePerGram14:
+              gp.pricePerGram14 != null && gp.pricePerGram14 > 0 ? String(gp.pricePerGram14) : '',
+          });
+        }
+      }
+      
+      // Fetch fuel prices
+      const fuelResponse = await fetch(`/api/fuel?ts=${Date.now()}`, { cache: 'no-store' });
+      const fuelResult = await fuelResponse.json();
+      if (fuelResult.success) {
+        setFuelPrices(fuelResult.data);
+        const editFuel: Record<string, string> = {};
+        fuelResult.data.forEach((fuel: FuelPriceData) => {
+          editFuel[fuel.code] = fuel.price.toString();
+        });
+        setEditingFuel(editFuel);
+      }
+      
+      // Fetch forex rates
+      const forexResponse = await fetch(`/api/forex?ts=${Date.now()}`, { cache: 'no-store' });
+      const forexResult = await forexResponse.json();
+      if (forexResult.success) {
+        setForexRates(forexResult.data);
+        const editForex: Record<string, { rate: string; change: string }> = {};
+        forexResult.data.forEach((forex: ForexRateData) => {
+          editForex[forex.pair] = {
+            rate: Number(forex.rate).toFixed(3),
+            change: forex.change.toString()
+          };
+        });
+        setEditingForex(editForex);
+      }
+      
+      // Fetch crypto rates
+      const cryptoResponse = await fetch(`/api/crypto?ts=${Date.now()}`, { cache: 'no-store' });
+      const cryptoResult = await cryptoResponse.json();
+      if (cryptoResult.success) {
+        setCryptoRates(cryptoResult.data);
+        const editCrypto: Record<string, { price: string; change: string }> = {};
+        cryptoResult.data.forEach((crypto: CryptoRateData) => {
+          editCrypto[crypto.code] = {
+            price: Number(crypto.price).toFixed(3),
+            change: crypto.change.toString()
+          };
+        });
+        setEditingCrypto(editCrypto);
+      }
+    } catch (error) {
+      console.error('Error fetching data:', error);
+    }
+  };
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginError('');
+    setIsLoggingIn(true);
+
+    try {
+      const response = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        setIsAuthenticated(true);
+        fetchData();
+        loadSettings();
+        toast({
+          title: locale === 'ar' ? 'تم تسجيل الدخول' : 'Logged in',
+          description: locale === 'ar' ? 'مرحباً بك في لوحة التحكم' : 'Welcome to admin panel'
+        });
+      } else {
+        setLoginError(result.message || (locale === 'ar' ? 'فشل في تسجيل الدخول' : 'Login failed'));
+      }
+    } catch {
+      setLoginError(locale === 'ar' ? 'حدث خطأ في الاتصال' : 'Connection error');
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth', { method: 'DELETE' });
+      setIsAuthenticated(false);
+      setUsername('');
+      setPassword('');
+      toast({
+        title: locale === 'ar' ? 'تم تسجيل الخروج' : 'Logged out',
+        description: locale === 'ar' ? 'تم تسجيل الخروج بنجاح' : 'Successfully logged out'
+      });
+    } catch {
+      // ignore
+    }
+  };
+
+  const refreshApiAccessPanel = async () => {
+    setApiAccessLoading(true);
+    try {
+      const r = await fetch('/api/admin/api-access');
+      const j = await r.json();
+      if (j.success) {
+        setApiRequests(j.requests as ApiAccessRequestRow[]);
+        setApiDomains(j.domains as ApiAllowedDomainRow[]);
+      }
+    } finally {
+      setApiAccessLoading(false);
+    }
+  };
+
+  const handleSaveUsdtWallet = async () => {
+    setSavingUsdtWallet(true);
+    try {
+      const priceNum = parseFloat(platformApiSubscriptionPriceUsd.replace(',', '.'));
+      const daysNum = parseInt(platformApiSubscriptionDays, 10);
+      const r = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          platformApiUsdtTrc20: platformApiUsdtTrc20.trim() === '' ? null : platformApiUsdtTrc20.trim(),
+          platformApiSubscriptionPriceUsd: Number.isFinite(priceNum) ? priceNum : 50,
+          platformApiSubscriptionDays: Number.isFinite(daysNum) ? daysNum : 365,
+        }),
+      });
+      const j = await r.json();
+      if (j.success) {
+        toast({
+          title: locale === 'ar' ? 'تم حفظ إعدادات API' : 'API settings saved',
+        });
+      } else {
+        toast({
+          variant: 'destructive',
+          title: locale === 'ar' ? 'فشل الحفظ' : 'Save failed',
+          description: j.error || j.details,
+        });
+      }
+    } finally {
+      setSavingUsdtWallet(false);
+    }
+  };
+
+  const handleApproveApiRequest = async (requestId: string) => {
+    const domain = (approveDomainDraft[requestId] ?? '').trim();
+    try {
+      const r = await fetch('/api/admin/api-access/action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'approve',
+          requestId,
+          ...(domain ? { domain } : {}),
+        }),
+      });
+      const j = await r.json();
+      if (!r.ok || !j.success) {
+        toast({
+          variant: 'destructive',
+          title: locale === 'ar' ? 'فشلت الموافقة' : 'Approve failed',
+          description: j.error,
+        });
+        return;
+      }
+      toast({ title: locale === 'ar' ? 'تمت الموافقة والنطاق' : 'Approved & domain updated' });
+      await refreshApiAccessPanel();
+    } catch {
+      toast({ variant: 'destructive', title: locale === 'ar' ? 'خطأ' : 'Error' });
+    }
+  };
+
+  const handleRejectApiRequest = async (requestId: string) => {
+    try {
+      const r = await fetch('/api/admin/api-access/action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'reject', requestId }),
+      });
+      const j = await r.json();
+      if (!r.ok || !j.success) {
+        toast({
+          variant: 'destructive',
+          title: locale === 'ar' ? 'فشل الرفض' : 'Reject failed',
+          description: j.error,
+        });
+        return;
+      }
+      toast({ title: locale === 'ar' ? 'تم رفض الطلب' : 'Request rejected' });
+      await refreshApiAccessPanel();
+    } catch {
+      toast({ variant: 'destructive', title: locale === 'ar' ? 'خطأ' : 'Error' });
+    }
+  };
+
+  const handleToggleApiDomain = async (id: string, enabled: boolean) => {
+    try {
+      const r = await fetch(`/api/admin/api-access/domains/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled }),
+      });
+      const j = await r.json();
+      if (!r.ok || !j.success) {
+        toast({ variant: 'destructive', title: locale === 'ar' ? 'فشل التحديث' : 'Update failed' });
+        return;
+      }
+      await refreshApiAccessPanel();
+    } catch {
+      toast({ variant: 'destructive', title: locale === 'ar' ? 'خطأ' : 'Error' });
+    }
+  };
+
+  const handleDeleteApiDomain = async (id: string) => {
+    if (!confirm(locale === 'ar' ? 'حذف هذا النطاق من القائمة؟' : 'Remove this domain from the list?')) return;
+    try {
+      const r = await fetch(`/api/admin/api-access/domains/${id}`, { method: 'DELETE' });
+      const j = await r.json();
+      if (!r.ok || !j.success) {
+        toast({ variant: 'destructive', title: locale === 'ar' ? 'فشل الحذف' : 'Delete failed' });
+        return;
+      }
+      await refreshApiAccessPanel();
+    } catch {
+      toast({ variant: 'destructive', title: locale === 'ar' ? 'خطأ' : 'Error' });
+    }
+  };
+
+  const handleAddManualDomain = async () => {
+    const d = newManualDomain.trim();
+    if (!d) return;
+    try {
+      const r = await fetch('/api/admin/api-access/domains', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ domain: d }),
+      });
+      const j = await r.json();
+      if (!r.ok || !j.success) {
+        toast({
+          variant: 'destructive',
+          title: locale === 'ar' ? 'فشل الإضافة' : 'Add failed',
+          description: j.error,
+        });
+        return;
+      }
+      setNewManualDomain('');
+      toast({ title: locale === 'ar' ? 'تمت إضافة النطاق' : 'Domain added' });
+      await refreshApiAccessPanel();
+    } catch {
+      toast({ variant: 'destructive', title: locale === 'ar' ? 'خطأ' : 'Error' });
+    }
+  };
+
+  const handleUpdateRate = async (currencyId: string) => {
+    if (syncSettings.autoUpdateEnabled) {
+      toast({
+        title: locale === 'ar' ? 'غير متاح' : 'Unavailable',
+        description:
+          locale === 'ar'
+            ? 'لا يمكن التعديل اليدوي أثناء تفعيل التحديث التلقائي. عطّل التحديث التلقائي أولاً.'
+            : 'Manual editing is disabled while auto update is enabled. Disable auto update first.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    const editRate = editingRates[currencyId];
+    if (!editRate) return;
+
+    try {
+      const response = await fetch('/api/admin/rates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          currencyId,
+          buyRate: editRate.buyRate,
+          sellRate: editRate.sellRate
+        })
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        toast({
+          title: locale === 'ar' ? 'تم التحديث' : 'Updated',
+          description: locale === 'ar' ? 'تم تحديث السعر بنجاح' : 'Rate updated successfully'
+        });
+        fetchData();
+      } else {
+        toast({
+          title: locale === 'ar' ? 'خطأ' : 'Error',
+          description:
+            result.error ||
+            (locale === 'ar' ? 'فشل في تحديث السعر' : 'Failed to update rate'),
+          variant: 'destructive',
+        });
+      }
+    } catch {
+      toast({
+        title: locale === 'ar' ? 'خطأ' : 'Error',
+        description: locale === 'ar' ? 'فشل في تحديث السعر' : 'Failed to update rate',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const handleUpdateGold = async () => {
+    try {
+      const body: Record<string, string> = {
+        priceUsd: goldInput.priceUsd,
+        pricePerGram: goldInput.pricePerGram,
+      };
+      if (goldInput.pricePerGram21.trim() !== '') body.pricePerGram21 = goldInput.pricePerGram21;
+      if (goldInput.pricePerGram18.trim() !== '') body.pricePerGram18 = goldInput.pricePerGram18;
+      if (goldInput.pricePerGram14.trim() !== '') body.pricePerGram14 = goldInput.pricePerGram14;
+      const response = await fetch('/api/admin/rates', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        toast({
+          title: locale === 'ar' ? 'تم التحديث' : 'Updated',
+          description: locale === 'ar' ? 'تم تحديث سعر الذهب بنجاح' : 'Gold price updated successfully'
+        });
+        fetchData();
+      }
+    } catch {
+      toast({
+        title: locale === 'ar' ? 'خطأ' : 'Error',
+        description: locale === 'ar' ? 'فشل في تحديث سعر الذهب' : 'Failed to update gold price',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const handleRefreshGold = async () => {
+    setRefreshing(true);
+    try {
+      const response = await fetch('/api/gold', { method: 'POST' });
+      const result = await response.json();
+      if (result.success) {
+        toast({
+          title: locale === 'ar' ? 'تم التحديث' : 'Updated',
+          description: locale === 'ar' 
+            ? `تم تحديث سعر الذهب من ${result.data.source}`
+            : `Gold price updated from ${result.data.source}`
+        });
+        fetchData();
+      }
+    } catch {
+      toast({
+        title: locale === 'ar' ? 'خطأ' : 'Error',
+        description: locale === 'ar' ? 'فشل في تحديث سعر الذهب' : 'Failed to update gold price',
+        variant: 'destructive'
+      });
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  // Update fuel price
+  const handleUpdateFuel = async (code: string) => {
+    const price = editingFuel[code];
+    if (!price) return;
+
+    try {
+      const response = await fetch('/api/fuel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code, price: parseFloat(price) })
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        toast({
+          title: locale === 'ar' ? 'تم التحديث' : 'Updated',
+          description: locale === 'ar' ? 'تم تحديث سعر المحروق بنجاح' : 'Fuel price updated successfully'
+        });
+        fetchData();
+      }
+    } catch {
+      toast({
+        title: locale === 'ar' ? 'خطأ' : 'Error',
+        description: locale === 'ar' ? 'فشل في تحديث سعر المحروق' : 'Failed to update fuel price',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const handleSaveFuelVisibility = async () => {
+    setSavingFuelVisibility(true);
+    try {
+      const response = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ fuelVisibilityMap }),
+      });
+      const result = (await response.json().catch(() => ({}))) as {
+        success?: boolean;
+        error?: string;
+        details?: string;
+      };
+      if (!response.ok || !result.success) {
+        const hint = [result.details, result.error].filter(Boolean).join(' — ');
+        toast({
+          title: locale === 'ar' ? 'فشل الحفظ' : 'Save failed',
+          description:
+            hint ||
+            (locale === 'ar' ? 'تعذّر حفظ إعدادات إظهار المحروقات' : 'Could not save fuel visibility settings'),
+          variant: 'destructive',
+        });
+        return;
+      }
+      toast({
+        title: locale === 'ar' ? 'تم الحفظ' : 'Saved',
+        description:
+          locale === 'ar'
+            ? 'تم حفظ إعدادات إظهار/إخفاء بطاقات المحروقات'
+            : 'Fuel card visibility settings saved',
+      });
+      loadSettings();
+    } catch {
+      toast({
+        title: locale === 'ar' ? 'خطأ' : 'Error',
+        description: locale === 'ar' ? 'فشل الاتصال' : 'Request failed',
+        variant: 'destructive',
+      });
+    } finally {
+      setSavingFuelVisibility(false);
+    }
+  };
+
+  const handleSaveFinnhubForex = async () => {
+    setSavingFinnhub(true);
+    try {
+      const body: Record<string, unknown> = {
+        forexRealtimeEnabled: finnhubForm.realtimeEnabled,
+        finnhubForexSymbolRows: finnhubForm.symbolRows.filter(
+          (r) => r.finnhubSymbol.trim() && r.pair.trim()
+        ),
+      };
+      if (finnhubForm.clearApiKey) body.clearFinnhubApiKey = true;
+      if (finnhubForm.apiKeyInput.trim()) body.finnhubApiKey = finnhubForm.apiKeyInput.trim();
+
+      const response = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        credentials: 'include',
+      });
+      const result = (await response.json().catch(() => ({}))) as {
+        success?: boolean;
+        error?: string;
+        details?: string;
+      };
+      if (!response.ok || !result.success) {
+        const hint = [result.details, result.error].filter(Boolean).join(' — ');
+        toast({
+          title: locale === 'ar' ? 'فشل الحفظ' : 'Save failed',
+          description: hint || (locale === 'ar' ? 'تعذّر حفظ إعدادات Finnhub' : 'Could not save Finnhub settings'),
+          variant: 'destructive',
+        });
+        return;
+      }
+      toast({
+        title: locale === 'ar' ? 'تم الحفظ' : 'Saved',
+        description:
+          locale === 'ar'
+            ? 'تم حفظ Finnhub. أعد تشغيل الخادم إن لم يبدأ البث تلقائياً.'
+            : 'Finnhub settings saved. Restart the server if the stream does not start.',
+      });
+      setFinnhubForm((p) => ({ ...p, apiKeyInput: '', clearApiKey: false }));
+      loadSettings();
+    } catch {
+      toast({
+        title: locale === 'ar' ? 'خطأ' : 'Error',
+        description: locale === 'ar' ? 'فشل الاتصال' : 'Request failed',
+        variant: 'destructive',
+      });
+    } finally {
+      setSavingFinnhub(false);
+    }
+  };
+
+  const handleFinnhubConnectionTest = async () => {
+    setFinnhubTestLoading(true);
+    setFinnhubTestResult(null);
+    try {
+      const response = await fetch('/api/admin/finnhub-test', {
+        method: 'GET',
+        credentials: 'include',
+        cache: 'no-store',
+      });
+      const result = (await response.json().catch(() => ({}))) as FinnhubTestApiResponse;
+      setFinnhubTestResult(result);
+      if (!response.ok || !result.success) {
+        toast({
+          title: locale === 'ar' ? 'فشل الاختبار' : 'Test failed',
+          description:
+            result.error ||
+            (locale === 'ar' ? 'تحقق من تسجيل الدخول للوحة التحكم' : 'Check admin login'),
+          variant: 'destructive',
+        });
+        return;
+      }
+      toast({
+        title: locale === 'ar' ? 'اكتمل الاختبار' : 'Test finished',
+        description:
+          result.rest?.ok
+            ? locale === 'ar'
+              ? 'وُجدت بيانات أسعار صالحة من Finnhub'
+              : 'Valid price data received from Finnhub'
+            : locale === 'ar'
+              ? 'راجع تفاصيل الاختبار أدناه'
+              : 'See details below',
+      });
+    } catch {
+      setFinnhubTestResult({ success: false, error: 'network' });
+      toast({
+        title: locale === 'ar' ? 'خطأ' : 'Error',
+        description: locale === 'ar' ? 'تعذّر الاتصال بالخادم' : 'Could not reach server',
+        variant: 'destructive',
+      });
+    } finally {
+      setFinnhubTestLoading(false);
+    }
+  };
+
+  const handleSaveAdsense = async () => {
+    setSavingAdsense(true);
+    try {
+      const response = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          adsenseEnabled: adsenseForm.enabled,
+          adsensePublisherId: adsenseForm.publisherId.trim() || null,
+          adsTxtRaw: adsenseForm.adsTxtRaw.trim() || null,
+          adsenseSlotHero: adsenseForm.slotHero.trim() || null,
+          adsenseSlotContent: adsenseForm.slotContent.trim() || null,
+          adsenseSlotArticle: adsenseForm.slotArticle.trim() || null,
+          adsenseArticleTopEnabled: adsenseForm.articleTopEnabled,
+          adsenseArticleInlineEnabled: adsenseForm.articleInlineEnabled,
+          adsenseArticleBottomEnabled: adsenseForm.articleBottomEnabled,
+        }),
+      });
+      const result = (await response.json().catch(() => ({}))) as { success?: boolean };
+      if (!response.ok || !result.success) {
+        toast({
+          title: locale === 'ar' ? 'فشل الحفظ' : 'Save failed',
+          variant: 'destructive',
+        });
+        return;
+      }
+      toast({
+        title: locale === 'ar' ? 'تم الحفظ' : 'Saved',
+        description:
+          locale === 'ar'
+            ? 'تم حفظ إعدادات AdSense وملف ads.txt.'
+            : 'AdSense and ads.txt settings saved.',
+      });
+      await loadSettings();
+    } catch {
+      toast({
+        title: locale === 'ar' ? 'خطأ' : 'Error',
+        description: locale === 'ar' ? 'فشل الاتصال' : 'Request failed',
+        variant: 'destructive',
+      });
+    } finally {
+      setSavingAdsense(false);
+    }
+  };
+
+  const copyPublicUrl = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast({
+        title: locale === 'ar' ? 'تم النسخ' : 'Copied',
+        description: text,
+      });
+    } catch {
+      toast({
+        title: locale === 'ar' ? 'تعذر النسخ' : 'Copy failed',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleSaveSearchConsole = async () => {
+    setSavingSearchConsole(true);
+    try {
+      const response = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          adsenseSiteVerification: searchConsoleForm.siteVerificationMeta.trim() || null,
+          gscHtmlVerificationFileName: searchConsoleForm.htmlFileName.trim() || null,
+          gscHtmlVerificationFileBody: searchConsoleForm.htmlFileBody.trim() || null,
+          gscExtraSiteVerificationMeta: searchConsoleForm.extraMeta.trim() || null,
+        }),
+      });
+      const result = (await response.json().catch(() => ({}))) as { success?: boolean };
+      if (!response.ok || !result.success) {
+        toast({
+          title: locale === 'ar' ? 'فشل الحفظ' : 'Save failed',
+          variant: 'destructive',
+        });
+        return;
+      }
+      toast({
+        title: locale === 'ar' ? 'تم الحفظ' : 'Saved',
+        description:
+          locale === 'ar'
+            ? 'تم حفظ إعدادات Google / Search Console.'
+            : 'Google / Search Console settings saved.',
+      });
+      await loadSettings();
+    } catch {
+      toast({
+        title: locale === 'ar' ? 'خطأ' : 'Error',
+        description: locale === 'ar' ? 'فشل الاتصال' : 'Request failed',
+        variant: 'destructive',
+      });
+    } finally {
+      setSavingSearchConsole(false);
+    }
+  };
+
+  const handleSaveCryptoLive = async () => {
+    setSavingCryptoLive(true);
+    try {
+      const body = {
+        cryptoRealtimeEnabled: cryptoLiveForm.enabled,
+        cryptoRealtimeCodes: cryptoLiveForm.codes,
+      };
+      const response = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        credentials: 'include',
+      });
+      const result = (await response.json().catch(() => ({}))) as { success?: boolean; error?: string; details?: string };
+      if (!response.ok || !result.success) {
+        toast({
+          title: locale === 'ar' ? 'فشل الحفظ' : 'Save failed',
+          description: result.details || result.error || 'Could not save crypto live settings',
+          variant: 'destructive',
+        });
+        return;
+      }
+      toast({
+        title: locale === 'ar' ? 'تم الحفظ' : 'Saved',
+        description: locale === 'ar' ? 'تم حفظ إعدادات الكريبتو الحية' : 'Crypto live settings saved',
+      });
+      loadSettings();
+    } catch {
+      toast({
+        title: locale === 'ar' ? 'خطأ' : 'Error',
+        description: locale === 'ar' ? 'فشل الاتصال' : 'Request failed',
+        variant: 'destructive',
+      });
+    } finally {
+      setSavingCryptoLive(false);
+    }
+  };
+
+  const handleCryptoLiveTest = async () => {
+    setCryptoLiveTestLoading(true);
+    setCryptoLiveTestResult(null);
+    try {
+      const res = await fetch('/api/admin/crypto-test', { credentials: 'include', cache: 'no-store' });
+      const j = (await res.json().catch(() => ({}))) as CryptoLiveTestResponse;
+      setCryptoLiveTestResult(j);
+      if (!res.ok || !j.success) {
+        toast({
+          title: locale === 'ar' ? 'فشل الاختبار' : 'Test failed',
+          description: j.error || 'Crypto test failed',
+          variant: 'destructive',
+        });
+        return;
+      }
+      toast({
+        title: locale === 'ar' ? 'اكتمل الاختبار' : 'Test finished',
+        description: j.result?.ok
+          ? locale === 'ar'
+            ? 'تم جلب أسعار كريبتو حية'
+            : 'Live crypto prices received'
+          : locale === 'ar'
+            ? 'لا توجد بيانات حالياً'
+            : 'No live rows returned',
+      });
+    } catch {
+      toast({
+        title: locale === 'ar' ? 'خطأ' : 'Error',
+        description: locale === 'ar' ? 'فشل الاتصال' : 'Request failed',
+        variant: 'destructive',
+      });
+    } finally {
+      setCryptoLiveTestLoading(false);
+    }
+  };
+
+  // Update forex rate
+  const handleUpdateForex = async (pair: string) => {
+    const data = editingForex[pair];
+    if (!data) return;
+
+    try {
+      const response = await fetch('/api/forex', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pair, rate: parseFloat(data.rate), change: parseFloat(data.change) })
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        toast({
+          title: locale === 'ar' ? 'تم التحديث' : 'Updated',
+          description: locale === 'ar' ? 'تم تحديث السعر بنجاح' : 'Rate updated successfully'
+        });
+        fetchData();
+      }
+    } catch {
+      toast({
+        title: locale === 'ar' ? 'خطأ' : 'Error',
+        description: locale === 'ar' ? 'فشل في تحديث السعر' : 'Failed to update rate',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  // Update crypto rate
+  const handleUpdateCrypto = async (code: string) => {
+    const data = editingCrypto[code];
+    if (!data) return;
+
+    try {
+      const response = await fetch('/api/crypto', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code, price: parseFloat(data.price), change: parseFloat(data.change) })
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        toast({
+          title: locale === 'ar' ? 'تم التحديث' : 'Updated',
+          description: locale === 'ar' ? 'تم تحديث سعر العملة الرقمية بنجاح' : 'Crypto rate updated successfully'
+        });
+        fetchData();
+      }
+    } catch {
+      toast({
+        title: locale === 'ar' ? 'خطأ' : 'Error',
+        description: locale === 'ar' ? 'فشل في تحديث سعر العملة الرقمية' : 'Failed to update crypto rate',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const patchSyncCategory = (id: SyncCategoryId, patch: Partial<CategorySyncConfig>) => {
+    setFullSync((prev) => {
+      const base =
+        prev ??
+        defaultSyncConfigV1({
+          updateIntervalHours: syncSettings.updateInterval,
+          adjustmentAmount: syncSettings.adjustmentAmount,
+          adjustmentType: syncSettings.adjustmentType,
+        });
+      return {
+        ...base,
+        categories: {
+          ...base.categories,
+          [id]: { ...base.categories[id], ...patch },
+        },
+      };
+    });
+  };
+
+  const resolvedSyncConfig = (): SyncConfigV1 =>
+    fullSync ??
+    defaultSyncConfigV1({
+      updateIntervalHours: syncSettings.updateInterval,
+      adjustmentAmount: syncSettings.adjustmentAmount,
+      adjustmentType: syncSettings.adjustmentType,
+    });
+
+  // Fetch rates from SP Today
+  const handleFetchFromSPToday = async () => {
+    setIsFetching(true);
+    try {
+      const cfg = resolvedSyncConfig();
+      const enabledNow = SYNC_TAB_CATEGORY_IDS.filter((id) => cfg.categories[id]?.enabled !== false);
+      if (enabledNow.length === 0) {
+        toast({
+          title: locale === 'ar' ? 'تنبيه' : 'Notice',
+          description:
+            locale === 'ar'
+              ? 'لا توجد فئات مفعّلة للجلب الآن. فعّل فئة واحدة على الأقل.'
+              : 'No enabled categories to fetch now. Enable at least one.',
+          variant: 'destructive',
+        });
+        return;
+      }
+      const response = await fetch('/api/fetch-rates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ categories: enabledNow }),
+      });
+      const result = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        toast({
+          title: locale === 'ar' ? 'خطأ' : 'Error',
+          description:
+            (result.error as string) ||
+            (locale === 'ar'
+              ? `فشل الطلب (${response.status})`
+              : `Request failed (${response.status})`),
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      if (result.success) {
+        const res = result.results as Record<string, { ok?: boolean; updated?: number; message?: string }> | undefined;
+        const fetchedCategories = Array.isArray(result.categories)
+          ? (result.categories as string[]).join(', ')
+          : '';
+        const summary =
+          res &&
+          Object.entries(res)
+            .filter(([, r]) => r?.ok)
+            .map(([k, r]) => `${k}: ${r.updated ?? 0}`)
+            .join(' · ');
+        toast({
+          title: locale === 'ar' ? 'تم الجلب' : 'Fetched',
+          description:
+            (summary ? `${summary}${fetchedCategories ? ` | ${fetchedCategories}` : ''}` : '') ||
+            (locale === 'ar' ? 'اكتملت المزامنة' : 'Sync completed'),
+        });
+        await Promise.all([fetchData(), loadSettings()]);
+      } else {
+        toast({
+          title: locale === 'ar' ? 'خطأ' : 'Error',
+          description:
+            (result.error as string) ||
+            (result.message as string) ||
+            (locale === 'ar' ? 'فشلت المزامنة أو كل الفئات فشلت' : 'Sync failed or all categories failed'),
+          variant: 'destructive',
+        });
+      }
+    } catch {
+      toast({
+        title: locale === 'ar' ? 'خطأ' : 'Error',
+        description: locale === 'ar' ? 'فشل في الاتصال بـ SP Today' : 'Failed to connect to SP Today',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsFetching(false);
+    }
+  };
+
+  // Update sync settings
+  const handleUpdateSyncSettings = async () => {
+    setSavingSettings(true);
+    try {
+      const base = resolvedSyncConfig();
+      const categories = {
+        ...base.categories,
+        crypto: { ...base.categories.crypto, enabled: false },
+        forex: { ...base.categories.forex, enabled: false },
+      };
+      const response = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          autoUpdateEnabled: syncSettings.autoUpdateEnabled,
+          syncConfig: { categories },
+        }),
+      });
+      
+      const result = await response.json();
+      if (result.success) {
+        toast({
+          title: locale === 'ar' ? 'تم الحفظ' : 'Saved',
+          description: locale === 'ar' ? 'تم حفظ إعدادات المزامنة بنجاح' : 'Sync settings saved successfully'
+        });
+      }
+    } catch {
+      toast({
+        title: locale === 'ar' ? 'خطأ' : 'Error',
+        description: locale === 'ar' ? 'فشل في حفظ الإعدادات' : 'Failed to save settings',
+        variant: 'destructive'
+      });
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
+  const handleLogoFile = async (file: File | null, target: 'ar' | 'nonAr') => {
+    if (!file) return;
+    setUploadingLogo(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('variant', target === 'ar' ? 'ar' : 'nonAr');
+      const response = await fetch('/api/admin/upload-logo', {
+        method: 'POST',
+        body: fd,
+        credentials: 'include',
+      });
+      let result: { success?: boolean; url?: string; error?: string } = {};
+      try {
+        result = await response.json();
+      } catch {
+        toast({
+          title: locale === 'ar' ? 'فشل الرفع' : 'Upload failed',
+          description: locale === 'ar' ? 'استجابة غير صالحة من الخادم' : 'Invalid server response',
+          variant: 'destructive',
+        });
+        return;
+      }
+      if (!response.ok || !result.success || !result.url) {
+        toast({
+          title: locale === 'ar' ? 'فشل الرفع' : 'Upload failed',
+          description:
+            result.error ||
+            (locale === 'ar'
+              ? `خطأ ${response.status}: تأكد من تسجيل الدخول وصيغة الصورة`
+              : `Error ${response.status}. Stay logged in; use PNG/JPG/WebP/GIF/SVG.`),
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      const sizesToSave = siteIdentity.logoSizes;
+      const patch =
+        target === 'ar'
+          ? { logoUrlAr: result.url!, logoSizes: sizesToSave }
+          : { logoUrlNonAr: result.url!, logoSizes: sizesToSave };
+      setSiteIdentity((prev) =>
+        target === 'ar'
+          ? { ...prev, logoUrlAr: result.url! }
+          : { ...prev, logoUrlNonAr: result.url! }
+      );
+
+      const saveRes = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+        credentials: 'include',
+      });
+      const saveJson = (await saveRes.json().catch(() => ({}))) as {
+        success?: boolean;
+        error?: string;
+        details?: string;
+      };
+
+      if (!saveRes.ok || !saveJson.success) {
+        const hint = [saveJson.details, saveJson.error].filter(Boolean).join(' — ');
+        toast({
+          title: locale === 'ar' ? 'تم الرفع' : 'Uploaded',
+          description:
+            hint ||
+            (locale === 'ar'
+              ? 'الملف على الخادم، لكن فشل حفظ الرابط في قاعدة البيانات. اضغط «حفظ هوية الموقع».'
+              : 'File saved on server, but DB update failed. Click «Save Site Identity».'),
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      toast({
+        title: locale === 'ar' ? 'تم' : 'Done',
+        description:
+          locale === 'ar'
+            ? 'تم رفع الشعار وحفظه. حدّث الصفحة الرئيسية إن لزم.'
+            : 'Logo uploaded and saved. Refresh the homepage if needed.',
+      });
+    } catch {
+      toast({
+        title: locale === 'ar' ? 'خطأ' : 'Error',
+        description: locale === 'ar' ? 'فشل رفع الشعار' : 'Logo upload failed',
+        variant: 'destructive',
+      });
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
+
+  // Update site identity
+  const handleUpdateSiteIdentity = async () => {
+    setSavingSettings(true);
+    try {
+      const response = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(siteIdentity),
+        credentials: 'include',
+      });
+
+      const result = (await response.json().catch(() => ({}))) as {
+        success?: boolean;
+        error?: string;
+        details?: string;
+      };
+      if (!response.ok || !result.success) {
+        const hint = [result.details, result.error].filter(Boolean).join(' — ');
+        toast({
+          title: locale === 'ar' ? 'فشل الحفظ' : 'Save failed',
+          description:
+            hint ||
+            (locale === 'ar' ? `خطأ ${response.status}` : `Error ${response.status}`),
+          variant: 'destructive',
+        });
+        return;
+      }
+      toast({
+        title: locale === 'ar' ? 'تم الحفظ' : 'Saved',
+        description: locale === 'ar' ? 'تم حفظ هوية الموقع بنجاح' : 'Site identity saved successfully',
+      });
+    } catch {
+      toast({
+        title: locale === 'ar' ? 'خطأ' : 'Error',
+        description: locale === 'ar' ? 'فشل في حفظ هوية الموقع' : 'Failed to save site identity',
+        variant: 'destructive',
+      });
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
+  // Update visual identity
+  const handleUpdateVisualIdentity = async () => {
+    setSavingSettings(true);
+    try {
+      const heroSectionTheme = isHeroThemeEqualToDefaults(visualIdentity.heroSectionTheme)
+        ? null
+        : sanitizeHeroSectionThemeForSave(visualIdentity.heroSectionTheme) ?? null;
+      const response = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          lightPrimaryColor: visualIdentity.lightPrimaryColor,
+          lightAccentColor: visualIdentity.lightAccentColor,
+          lightBgColor: visualIdentity.lightBgColor,
+          darkPrimaryColor: visualIdentity.darkPrimaryColor,
+          darkAccentColor: visualIdentity.darkAccentColor,
+          darkBgColor: visualIdentity.darkBgColor,
+          heroSectionTheme,
+        }),
+      });
+      
+      const result = await response.json();
+      if (result.success) {
+        toast({
+          title: locale === 'ar' ? 'تم الحفظ' : 'Saved',
+          description: locale === 'ar' ? 'تم حفظ الهوية البصرية بنجاح' : 'Visual identity saved successfully'
+        });
+        // Apply colors to CSS variables
+        applyColors(visualIdentity);
+      }
+    } catch {
+      toast({
+        title: locale === 'ar' ? 'خطأ' : 'Error',
+        description: locale === 'ar' ? 'فشل في حفظ الهوية البصرية' : 'Failed to save visual identity',
+        variant: 'destructive'
+      });
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
+  /** يطبّق حزمة الألوان الكاملة للموقع العلني على عنصر html (واجهة الإدارة معزولة بـ .admin-panel). */
+  const applyColors = useCallback((colors: VisualIdentity) => {
+    const root = document.documentElement;
+    const isDark =
+      resolvedTheme == null ? root.classList.contains('dark') : resolvedTheme === 'dark';
+    applySiteBrandCssVars(root, isDark ? 'dark' : 'light', colors);
+  }, [resolvedTheme]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    applyColors(visualIdentity);
+  }, [isAuthenticated, visualIdentity, applyColors]);
+
+  const formatTime = (dateString: string | null) => {
+    if (!dateString) return '--';
+    const date = new Date(dateString);
+    const localeStr = locale === 'ar' ? 'ar-SY' : locale === 'de' ? 'de-DE' : locale === 'sv' ? 'sv-SE' : locale === 'fr' ? 'fr-FR' : 'en-US';
+    return new Intl.DateTimeFormat(localeStr, {
+      ...numberingLatn,
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      day: 'numeric',
+      month: 'short',
+    }).format(date);
+  };
+
+  const formatNumber = (num: number) => {
+    const displayNum = isNewLira ? num / 100 : num;
+    const localeStr = locale === 'ar' ? 'ar-SY' : locale === 'de' ? 'de-DE' : locale === 'sv' ? 'sv-SE' : locale === 'fr' ? 'fr-FR' : 'en-US';
+    return new Intl.NumberFormat(localeStr, { ...numberingLatn }).format(displayNum);
+  };
+
+  const getCurrencyName = (currency: CurrencyRate) => {
+    if (locale === 'ar') return currency.nameAr;
+    return currency.nameEn || currency.nameAr;
+  };
+
+  const isRtl = locale === 'ar';
+  const adminSidebarTriggerClass = cn(
+    'flex h-9 flex-none items-center justify-center gap-2 rounded-md border border-transparent px-2 py-2 text-sm font-medium transition-colors data-[state=active]:border-border/80 data-[state=active]:bg-background data-[state=active]:shadow-sm sm:flex-1 sm:justify-center lg:h-auto lg:min-h-10 lg:w-full lg:flex-none lg:py-2.5',
+    sidebarCollapsed ? 'lg:justify-center lg:px-1' : 'lg:justify-start'
+  );
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/5 via-background to-primary/10 dark:from-primary/10 dark:via-background dark:to-primary/5">
+        <RefreshCw className="w-8 h-8 text-primary animate-spin" />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/5 via-background to-primary/10 dark:from-primary/10 dark:via-background dark:to-primary/5 p-4" dir={isRtl ? 'rtl' : 'ltr'}>
+        <Card className="w-full max-w-md bg-card/50 border-border backdrop-blur-sm">
+          <CardHeader className="text-center pb-2">
+            <div className="w-16 h-16 bg-primary/20 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Shield className="w-8 h-8 text-primary" />
+            </div>
+            <CardTitle className="text-2xl">{t('admin.title')}</CardTitle>
+            <p className="text-muted-foreground text-sm mt-1">{t('site.title')}</p>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleLogin} className="space-y-4">
+              {loginError && (
+                <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3 flex items-center gap-2 text-destructive text-sm">
+                  <AlertCircle className="w-4 h-4" />
+                  {loginError}
+                </div>
+              )}
+              
+              <div>
+                <Label htmlFor="username">{t('admin.username')}</Label>
+                <Input
+                  id="username"
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder={t('admin.usernamePlaceholder')}
+                  className="mt-1"
+                  required
+                />
+              </div>
+              
+              <div>
+                <Label htmlFor="password">{t('admin.password')}</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder={t('admin.passwordPlaceholder')}
+                  className="mt-1"
+                  required
+                />
+              </div>
+              
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={isLoggingIn}
+              >
+                {isLoggingIn ? (
+                  <RefreshCw className="w-4 h-4 ml-1 animate-spin" />
+                ) : (
+                  <Lock className="w-4 h-4 ml-1" />
+                )}
+                {t('admin.loginButton')}
+              </Button>
+            </form>
+            
+            <div className="mt-6 pt-4 border-t text-center">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => router.push('/')}
+                className="text-muted-foreground"
+              >
+                {t('admin.backToHome')}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="min-h-screen bg-background text-foreground bg-[radial-gradient(ellipse_120%_80%_at_50%_-20%,oklch(0.55_0.14_245/0.08),transparent_55%)] dark:bg-[radial-gradient(ellipse_100%_70%_at_50%_-15%,oklch(0.72_0.12_72/0.12),transparent_50%)]"
+      dir={isRtl ? 'rtl' : 'ltr'}
+    >
+      {/* Header */}
+      <header className="sticky top-0 z-50 border-b border-border bg-card/85 backdrop-blur-md shadow-sm">
+        <div className="container mx-auto px-4 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 bg-gradient-to-br from-primary to-primary/80 rounded-xl flex items-center justify-center shadow-lg shadow-primary/20">
+                <Settings className="w-6 h-6 text-primary-foreground" />
+              </div>
+              <div>
+                <h1 className="text-xl font-bold">{t('admin.title')}</h1>
+                <p className="text-sm text-muted-foreground">{t('admin.description')}</p>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-3">
+              {/* New Lira Toggle */}
+              <div className="flex items-center gap-2 bg-card border border-border rounded-lg px-3 py-1.5">
+                <Sparkles className={`w-4 h-4 ${isNewLira ? 'text-amber-500' : 'text-muted-foreground'}`} />
+                <span className="text-sm font-medium hidden sm:inline">
+                  {locale === 'ar' ? 'الليرة الجديدة' : 'New Lira'}
+                </span>
+                <Switch
+                  checked={isNewLira}
+                  onCheckedChange={setIsNewLira}
+                  className="data-[state=checked]:bg-amber-500"
+                />
+              </div>
+              
+              <LanguageSwitcher />
+              <ThemeToggle />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => router.push('/')}
+              >
+                {locale === 'ar' ? 'الصفحة الرئيسية' : 'Home'}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleLogout}
+                className="text-destructive hover:text-destructive hover:bg-destructive/10"
+              >
+                <LogOut className="w-4 h-4 ml-1" />
+                {t('admin.logout')}
+              </Button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <main className="container mx-auto px-4 py-6">
+        {/* New Lira Banner */}
+        {isNewLira && (
+          <div className="mb-4 bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 text-center">
+            <p className="text-amber-600 dark:text-amber-400 font-medium flex items-center justify-center gap-2">
+              <Sparkles className="w-4 h-4" />
+              {locale === 'ar' 
+                ? 'أسعار الليرة السورية الجديدة (تم حذف صفرين)' 
+                : 'New Syrian Pound prices (2 zeros removed)'}
+            </p>
+          </div>
+        )}
+
+        {/* Tabs — شريط جانبي على الشاشات الواسعة */}
+        <Tabs
+          value={activeTab}
+          onValueChange={setActiveTab}
+          className="flex w-full flex-col gap-4 lg:flex-row lg:items-start lg:gap-6"
+        >
+          <div
+            className={cn(
+              'flex w-full shrink-0 flex-col gap-2 rounded-xl border border-border/50 bg-muted/30 p-1 sm:p-2 lg:sticky lg:top-24 lg:z-10 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto lg:border-border/60 lg:bg-card/50 lg:p-2 lg:shadow-sm',
+              sidebarCollapsed ? 'lg:w-[4.25rem]' : 'lg:w-60'
+            )}
+          >
+            <div className="hidden items-center justify-between gap-1 lg:flex lg:shrink-0">
+              <span
+                className={cn(
+                  'truncate text-xs font-semibold uppercase tracking-wide text-muted-foreground',
+                  sidebarCollapsed && 'sr-only'
+                )}
+              >
+                {locale === 'ar' ? 'القائمة' : 'Menu'}
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 shrink-0"
+                onClick={() => {
+                  setSidebarCollapsed((c) => {
+                    const n = !c;
+                    try {
+                      localStorage.setItem('adminSidebarCollapsed', n ? '1' : '0');
+                    } catch {
+                      /* ignore */
+                    }
+                    return n;
+                  });
+                }}
+                aria-label={locale === 'ar' ? 'طي القائمة' : 'Toggle sidebar'}
+              >
+                {sidebarCollapsed ? (
+                  <PanelRight className="h-4 w-4" />
+                ) : (
+                  <PanelLeft className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
+            <TabsList className="no-scrollbar mb-0 flex h-auto min-h-0 w-full flex-wrap items-stretch justify-start gap-1 overflow-x-auto rounded-lg bg-muted/40 p-1 sm:bg-muted/50 lg:flex-col lg:flex-nowrap lg:overflow-y-visible lg:overflow-x-visible lg:bg-transparent lg:p-0">
+              <TabsTrigger value="rates" className={adminSidebarTriggerClass}>
+                <Coins className="h-4 w-4 shrink-0" />
+                <span className={cn('hidden sm:inline', sidebarCollapsed && 'lg:hidden')}>
+                  {locale === 'ar' ? 'الصرف' : 'Rates'}
+                </span>
+              </TabsTrigger>
+              <TabsTrigger value="fuel" className={adminSidebarTriggerClass}>
+                <Fuel className="h-4 w-4 shrink-0" />
+                <span className={cn('hidden sm:inline', sidebarCollapsed && 'lg:hidden')}>
+                  {locale === 'ar' ? 'المحروقات' : 'Fuel'}
+                </span>
+              </TabsTrigger>
+              <TabsTrigger value="forex" className={adminSidebarTriggerClass}>
+                <DollarSign className="h-4 w-4 shrink-0" />
+                <span className={cn('hidden sm:inline', sidebarCollapsed && 'lg:hidden')}>
+                  {locale === 'ar' ? 'البورصات العالمية' : 'Global markets'}
+                </span>
+              </TabsTrigger>
+              <TabsTrigger value="crypto" className={adminSidebarTriggerClass}>
+                <span className="shrink-0 text-sm">₿</span>
+                <span className={cn('hidden sm:inline', sidebarCollapsed && 'lg:hidden')}>
+                  {locale === 'ar' ? 'العملات الرقمية' : 'Crypto'}
+                </span>
+              </TabsTrigger>
+              <TabsTrigger value="sync" className={adminSidebarTriggerClass}>
+                <Download className="h-4 w-4 shrink-0" />
+                <span className={cn('hidden sm:inline', sidebarCollapsed && 'lg:hidden')}>
+                  {locale === 'ar' ? 'مزامنة' : 'Sync'}
+                </span>
+              </TabsTrigger>
+              <TabsTrigger value="identity" className={adminSidebarTriggerClass}>
+                <Globe className="h-4 w-4 shrink-0" />
+                <span className={cn('hidden sm:inline', sidebarCollapsed && 'lg:hidden')}>
+                  {locale === 'ar' ? 'الهوية' : 'Identity'}
+                </span>
+              </TabsTrigger>
+              <TabsTrigger value="visual" className={adminSidebarTriggerClass}>
+                <Palette className="h-4 w-4 shrink-0" />
+                <span className={cn('hidden sm:inline', sidebarCollapsed && 'lg:hidden')}>
+                  {locale === 'ar' ? 'الألوان' : 'Colors'}
+                </span>
+              </TabsTrigger>
+              <TabsTrigger value="searchConsole" className={adminSidebarTriggerClass}>
+                <FileSearch className="h-4 w-4 shrink-0" />
+                <span className={cn('hidden sm:inline', sidebarCollapsed && 'lg:hidden')}>
+                  {locale === 'ar' ? 'Search Console' : 'Search Console'}
+                </span>
+              </TabsTrigger>
+              <TabsTrigger value="adsense" className={adminSidebarTriggerClass}>
+                <Megaphone className="h-4 w-4 shrink-0" />
+                <span className={cn('hidden sm:inline', sidebarCollapsed && 'lg:hidden')}>
+                  AdSense
+                </span>
+              </TabsTrigger>
+              <TabsTrigger value="articles" className={adminSidebarTriggerClass}>
+                <FileSearch className="h-4 w-4 shrink-0" />
+                <span className={cn('hidden sm:inline', sidebarCollapsed && 'lg:hidden')}>
+                  {locale === 'ar' ? 'المقالات' : 'Articles'}
+                </span>
+              </TabsTrigger>
+              <TabsTrigger value="analytics" className={adminSidebarTriggerClass}>
+                <BarChart3 className="h-4 w-4 shrink-0" />
+                <span className={cn('hidden sm:inline', sidebarCollapsed && 'lg:hidden')}>
+                  {locale === 'ar' ? 'الزيارات' : 'Analytics'}
+                </span>
+              </TabsTrigger>
+              <TabsTrigger value="api" className={adminSidebarTriggerClass}>
+                <Code className="h-4 w-4 shrink-0" />
+                <span className={cn('hidden sm:inline', sidebarCollapsed && 'lg:hidden')}>API</span>
+              </TabsTrigger>
+            </TabsList>
+          </div>
+
+          <div className="min-w-0 flex-1">
+          {/* Tab 1: Exchange Rates */}
+          <TabsContent value="rates" className="space-y-6">
+            <div className="grid gap-6 lg:grid-cols-2">
+              {/* Gold Price Management */}
+              <Card className="bg-card/50 border-border backdrop-blur-sm">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <span className="text-2xl">🥇</span>
+                    {t('admin.goldManagement')}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="bg-primary/10 border border-primary/20 rounded-lg p-3 text-center">
+                    <p className="text-primary text-sm">{t('admin.currentPrice')}</p>
+                    <p className="text-2xl font-bold">
+                      ${goldPrice ? goldPrice.priceUsd.toFixed(2) : '---'}
+                    </p>
+                    <p className="text-xs text-muted-foreground">{t('admin.perOunce')}</p>
+                  </div>
+                  
+                  <Button 
+                    onClick={handleRefreshGold}
+                    disabled={refreshing}
+                    className="w-full"
+                  >
+                    {refreshing ? (
+                      <RefreshCw className="w-4 h-4 ml-1 animate-spin" />
+                    ) : (
+                      <RefreshCw className="w-4 h-4 ml-1" />
+                    )}
+                    {t('admin.autoUpdate')}
+                  </Button>
+                  
+                  <Separator />
+                  
+                  <p className="text-sm text-muted-foreground text-center">{t('admin.orManual')}</p>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label>{t('admin.ouncePriceUsd')}</Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={goldInput.priceUsd}
+                        onChange={(e) => setGoldInput({ ...goldInput, priceUsd: e.target.value })}
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label>{t('admin.gramPriceUsd')}</Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={goldInput.pricePerGram}
+                        onChange={(e) => setGoldInput({ ...goldInput, pricePerGram: e.target.value })}
+                        className="mt-1"
+                      />
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground text-center">
+                    {locale === 'ar'
+                      ? 'عيار 21 / 18 / 14 — غرام بالدولار (اختياري؛ تُحدَّث تلقائياً من المزامنة مع SP Today)'
+                      : '21K / 18K / 14K — USD per gram (optional; filled by SP Today sync)'}
+                  </p>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <Label>21K $/g</Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={goldInput.pricePerGram21}
+                        onChange={(e) => setGoldInput({ ...goldInput, pricePerGram21: e.target.value })}
+                        className="mt-1"
+                        placeholder="—"
+                      />
+                    </div>
+                    <div>
+                      <Label>18K $/g</Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={goldInput.pricePerGram18}
+                        onChange={(e) => setGoldInput({ ...goldInput, pricePerGram18: e.target.value })}
+                        className="mt-1"
+                        placeholder="—"
+                      />
+                    </div>
+                    <div>
+                      <Label>14K $/g</Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={goldInput.pricePerGram14}
+                        onChange={(e) => setGoldInput({ ...goldInput, pricePerGram14: e.target.value })}
+                        className="mt-1"
+                        placeholder="—"
+                      />
+                    </div>
+                  </div>
+                  <Button onClick={handleUpdateGold} className="w-full bg-green-600 hover:bg-green-700">
+                    <Check className="w-4 h-4 ml-1" />
+                    {t('admin.saveGold')}
+                  </Button>
+                </CardContent>
+              </Card>
+
+              {/* Quick Stats */}
+              <Card className="bg-card/50 border-border backdrop-blur-sm">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Coins className="w-5 h-5 text-primary" />
+                    {t('admin.stats')}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-muted/50 rounded-lg p-4 text-center">
+                      <p className="text-muted-foreground text-sm">{t('admin.currencyCount')}</p>
+                      <p className="text-3xl font-bold">{rates.length}</p>
+                    </div>
+                    <div className="bg-muted/50 rounded-lg p-4 text-center">
+                      <p className="text-muted-foreground text-sm">{t('admin.usdRate')}</p>
+                      <p className="text-xl font-bold text-green-500">
+                        {rates.find(r => r.code === 'USD')?.buyRate ? formatNumber(rates.find(r => r.code === 'USD')!.buyRate) : '---'}
+                        <span className="text-xs text-muted-foreground ml-1">
+                          {isNewLira ? (locale === 'ar' ? 'ل.ج' : 'NSP') : ''}
+                        </span>
+                      </p>
+                    </div>
+                    <div className="bg-muted/50 rounded-lg p-4 text-center">
+                      <p className="text-muted-foreground text-sm">{t('admin.eurRate')}</p>
+                      <p className="text-xl font-bold text-green-500">
+                        {rates.find(r => r.code === 'EUR')?.buyRate ? formatNumber(rates.find(r => r.code === 'EUR')!.buyRate) : '---'}
+                        <span className="text-xs text-muted-foreground ml-1">
+                          {isNewLira ? (locale === 'ar' ? 'ل.ج' : 'NSP') : ''}
+                        </span>
+                      </p>
+                    </div>
+                    <div className="bg-muted/50 rounded-lg p-4 text-center">
+                      <p className="text-muted-foreground text-sm">{t('admin.tryRate')}</p>
+                      <p className="text-xl font-bold text-green-500">
+                        {rates.find(r => r.code === 'TRY')?.buyRate ? formatNumber(rates.find(r => r.code === 'TRY')!.buyRate) : '---'}
+                        <span className="text-xs text-muted-foreground ml-1">
+                          {isNewLira ? (locale === 'ar' ? 'ل.ج' : 'NSP') : ''}
+                        </span>
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Currency Rates Management */}
+            <Card className="bg-card/50 border-border backdrop-blur-sm">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <span className="text-2xl">💱</span>
+                  {t('admin.exchangeManagement')}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {syncSettings.autoUpdateEnabled ? (
+                  <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
+                    {locale === 'ar'
+                      ? 'التعديل اليدوي لسعر الصرف مُعطّل أثناء تفعيل التحديث التلقائي. عطّل التحديث التلقائي من تبويب المزامنة أولاً.'
+                      : 'Manual exchange-rate editing is disabled while auto update is enabled. Disable it from Sync tab first.'}
+                  </div>
+                ) : null}
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  {rates.map((currency, index) => (
+                    <div
+                      key={`cur-${index}-${currency.id ?? currency.code}`}
+                      className="bg-muted/50 rounded-xl p-4 space-y-3"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-3xl">{currency.flagEmoji}</span>
+                        <div>
+                          <p className="font-bold">{getCurrencyName(currency)}</p>
+                          <p className="text-sm text-muted-foreground">{currency.code} {currency.symbol}</p>
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <Label className="text-green-500 text-xs">{t('currency.buyRate')}</Label>
+                          <Input
+                            type="number"
+                            value={editingRates[currency.id]?.buyRate || '0'}
+                            disabled={syncSettings.autoUpdateEnabled}
+                            onChange={(e) => setEditingRates({
+                              ...editingRates,
+                              [currency.id]: {
+                                ...editingRates[currency.id],
+                                buyRate: e.target.value
+                              }
+                            })}
+                            className="mt-1 h-9"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-red-500 text-xs">{t('currency.sellRate')}</Label>
+                          <Input
+                            type="number"
+                            value={editingRates[currency.id]?.sellRate || '0'}
+                            disabled={syncSettings.autoUpdateEnabled}
+                            onChange={(e) => setEditingRates({
+                              ...editingRates,
+                              [currency.id]: {
+                                ...editingRates[currency.id],
+                                sellRate: e.target.value
+                              }
+                            })}
+                            className="mt-1 h-9"
+                          />
+                        </div>
+                      </div>
+                      
+                      <Button 
+                        onClick={() => handleUpdateRate(currency.id)}
+                        size="sm"
+                        disabled={syncSettings.autoUpdateEnabled}
+                        className="w-full bg-green-600 hover:bg-green-700"
+                      >
+                        <Check className="w-4 h-4 ml-1" />
+                        {t('admin.save')}
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Tab 2: Fuel Prices */}
+          <TabsContent value="fuel" className="space-y-6">
+            <Card className="bg-card/50 border-border backdrop-blur-sm">
+              <CardHeader>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <CardTitle className="flex items-center gap-2">
+                    <Fuel className="w-5 h-5 text-primary" />
+                    {locale === 'ar' ? 'أسعار المحروقات' : 'Fuel Prices'}
+                  </CardTitle>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => void handleSaveFuelVisibility()}
+                    disabled={savingFuelVisibility}
+                  >
+                    {savingFuelVisibility
+                      ? locale === 'ar'
+                        ? 'جاري الحفظ…'
+                        : 'Saving…'
+                      : locale === 'ar'
+                        ? 'حفظ الإظهار/الإخفاء'
+                        : 'Save visibility'}
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  {fuelPrices.map((fuel, index) => (
+                    <div
+                      key={`fuel-${index}-${fuel.id ?? fuel.code}`}
+                      className="bg-muted/50 rounded-xl p-4 space-y-3"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-3xl">⛽</span>
+                        <div>
+                          <p className="font-bold">{locale === 'ar' ? fuel.nameAr : fuel.nameEn}</p>
+                          <p className="text-sm text-muted-foreground">{fuel.code} • {locale === 'ar' ? fuel.unitAr : fuel.unitEn}</p>
+                        </div>
+                        <div className="ms-auto flex items-center gap-2">
+                          <Label htmlFor={`fuel-visible-${fuel.code}`} className="text-xs text-muted-foreground">
+                            {locale === 'ar' ? 'إظهار' : 'Visible'}
+                          </Label>
+                          <Switch
+                            id={`fuel-visible-${fuel.code}`}
+                            checked={fuelVisibilityMap[fuel.code.toUpperCase()] !== false}
+                            onCheckedChange={(v) =>
+                              setFuelVisibilityMap((prev) => ({
+                                ...prev,
+                                [fuel.code.toUpperCase()]: v,
+                              }))
+                            }
+                          />
+                        </div>
+                      </div>
+                      
+                      <div>
+                        <Label className="text-primary text-xs">
+                          {locale === 'ar' ? 'السعر (ل.س)' : 'Price (SYP)'}
+                        </Label>
+                        <Input
+                          type="number"
+                          value={editingFuel[fuel.code] || '0'}
+                          onChange={(e) => setEditingFuel({
+                            ...editingFuel,
+                            [fuel.code]: e.target.value
+                          })}
+                          className="mt-1 h-9"
+                        />
+                      </div>
+                      
+                      <Button 
+                        onClick={() => handleUpdateFuel(fuel.code)}
+                        size="sm"
+                        className="w-full bg-green-600 hover:bg-green-700"
+                      >
+                        <Check className="w-4 h-4 ml-1" />
+                        {t('admin.save')}
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Tab 3: Forex Rates */}
+          <TabsContent value="forex" className="space-y-6">
+            <Card className="border-primary/20 bg-primary/5 backdrop-blur-sm">
+              <CardHeader>
+                <CardTitle className="flex flex-wrap items-center gap-2 text-base">
+                  <Zap className="h-5 w-5 text-primary" />
+                  {locale === 'ar' ? 'Finnhub — بث لحظي من الخادم' : 'Finnhub — server-side live stream'}
+                </CardTitle>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  {locale === 'ar'
+                    ? 'الاتصال من الخادم فقط. طبقة Finnhub المجانية قد ترفض بعض الرموز (403) — يتم استخدام احتياط Frankfurter وYahoo تلقائياً حسب الأصل. راجع '
+                    : 'Server-side only. The free Finnhub tier may block some symbols (403) — Frankfurter/Yahoo fallbacks are used automatically by asset type. See '}
+                  <a
+                    href="https://finnhub.io/docs/api/websocket-trades"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary underline-offset-2 hover:underline"
+                  >
+                    WebSocket trades
+                  </a>
+                  {locale === 'ar' ? ' للرموز المدعومة.' : ' for supported symbols.'}
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      id="finnhub-realtime"
+                      checked={finnhubForm.realtimeEnabled}
+                      onCheckedChange={(v) => setFinnhubForm((p) => ({ ...p, realtimeEnabled: v }))}
+                    />
+                    <Label htmlFor="finnhub-realtime" className="text-sm font-medium cursor-pointer">
+                      {locale === 'ar' ? 'تفعيل البث اللحظي' : 'Enable live streaming'}
+                    </Label>
+                  </div>
+                  <Button type="button" variant="outline" size="sm" className="shrink-0" asChild>
+                    <a
+                      href="https://finnhub.io/register"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {locale === 'ar' ? 'الحصول على API Key' : 'Get API key'}
+                    </a>
+                  </Button>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs">
+                    {locale === 'ar' ? 'مفتاح Finnhub API' : 'Finnhub API key'}
+                  </Label>
+                  <Input
+                    type="password"
+                    autoComplete="off"
+                    placeholder={
+                      finnhubForm.finnhubApiKeySet
+                        ? locale === 'ar'
+                          ? 'اتركه فارغاً للإبقاء على المفتاح المحفوظ'
+                          : 'Leave blank to keep the saved key'
+                        : locale === 'ar'
+                          ? 'الصق المفتاح هنا'
+                          : 'Paste your key here'
+                    }
+                    value={finnhubForm.apiKeyInput}
+                    onChange={(e) => setFinnhubForm((p) => ({ ...p, apiKeyInput: e.target.value }))}
+                    className="font-mono text-sm"
+                  />
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="finnhub-clear-key"
+                      checked={finnhubForm.clearApiKey}
+                      onCheckedChange={(c) =>
+                        setFinnhubForm((p) => ({ ...p, clearApiKey: c === true }))
+                      }
+                    />
+                    <Label htmlFor="finnhub-clear-key" className="text-xs cursor-pointer font-normal">
+                      {locale === 'ar' ? 'حذف المفتاح المحفوظ' : 'Remove saved API key'}
+                    </Label>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <Label className="text-xs font-medium">
+                      {locale === 'ar' ? 'ربط رمز Finnhub ← زوج العرض' : 'Finnhub symbol → display pair'}
+                    </Label>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 text-xs"
+                      onClick={() => setFinnhubForm((p) => ({ ...p, symbolRows: [...FINNHUB_SYMBOL_DEFAULTS] }))}
+                    >
+                      {locale === 'ar' ? 'تعبئة افتراضية' : 'Load defaults'}
+                    </Button>
+                  </div>
+                  <div className="rounded-lg border border-border overflow-hidden">
+                    <div className="grid grid-cols-[1fr_1fr_auto] gap-2 bg-muted/50 px-3 py-2 text-xs font-medium">
+                      <span>Finnhub symbol</span>
+                      <span>{locale === 'ar' ? 'الزوج في الموقع' : 'Site pair'}</span>
+                      <span className="w-8" />
+                    </div>
+                    <div className="divide-y divide-border">
+                      {finnhubForm.symbolRows.map((row, idx) => (
+                        <div
+                          key={`fh-row-${idx}`}
+                          className="grid grid-cols-[1fr_1fr_auto] gap-2 items-center px-3 py-2"
+                        >
+                          <Input
+                            className="h-9 font-mono text-xs"
+                            placeholder="OANDA:EUR_USD"
+                            value={row.finnhubSymbol}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setFinnhubForm((p) => {
+                                const next = [...p.symbolRows];
+                                next[idx] = { ...next[idx], finnhubSymbol: v };
+                                return { ...p, symbolRows: next };
+                              });
+                            }}
+                          />
+                          <select
+                            className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                            value={row.pair}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setFinnhubForm((p) => {
+                                const next = [...p.symbolRows];
+                                next[idx] = { ...next[idx], pair: v };
+                                return { ...p, symbolRows: next };
+                              });
+                            }}
+                          >
+                            {row.pair && !forexRates.some((fx) => fx.pair === row.pair) ? (
+                              <option value={row.pair}>{row.pair}</option>
+                            ) : null}
+                            {(forexRates.length > 0 ? forexRates : [{ pair: 'EUR/USD' } as ForexRateData]).map(
+                              (fx) => (
+                                <option key={fx.pair} value={fx.pair}>
+                                  {fx.pair}
+                                </option>
+                              )
+                            )}
+                          </select>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-9 w-9 shrink-0 text-destructive"
+                            onClick={() =>
+                              setFinnhubForm((p) => ({
+                                ...p,
+                                symbolRows: p.symbolRows.filter((_, i) => i !== idx),
+                              }))
+                            }
+                            aria-label={locale === 'ar' ? 'حذف الصف' : 'Remove row'}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="w-full sm:w-auto"
+                    onClick={() =>
+                      setFinnhubForm((p) => ({
+                        ...p,
+                        symbolRows: [
+                          ...p.symbolRows,
+                          { finnhubSymbol: '', pair: forexRates[0]?.pair ?? 'EUR/USD' },
+                        ],
+                      }))
+                    }
+                  >
+                    <Plus className="h-4 w-4 me-1" />
+                    {locale === 'ar' ? 'صف جديد' : 'Add row'}
+                  </Button>
+                </div>
+
+                <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 text-sm font-medium">
+                      <FlaskConical className="h-4 w-4 text-primary shrink-0" />
+                      {locale === 'ar' ? 'اختبار الاتصال والبيانات' : 'Connection & data test'}
+                    </div>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      disabled={finnhubTestLoading}
+                      onClick={() => void handleFinnhubConnectionTest()}
+                    >
+                      {finnhubTestLoading ? (
+                        <>
+                          <Loader2 className="h-4 w-4 me-1 animate-spin" />
+                          {locale === 'ar' ? 'جاري الاختبار…' : 'Testing…'}
+                        </>
+                      ) : locale === 'ar' ? (
+                        'تشغيل الاختبار'
+                      ) : (
+                        'Run test'
+                      )}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    {locale === 'ar'
+                      ? 'يُقرأ المفتاح والرموز المحفوظة في قاعدة البيانات (احفظ التغييرات أولاً إن عدّلتها). يتحقق من مقبس WebSocket على هذا الخادم ومن واجهة REST لشموع الفوركس.'
+                      : 'Uses the API key and symbols saved in the database (save changes first if you edited them). Checks the WebSocket on this server and the forex candle REST API.'}
+                  </p>
+                  {finnhubTestResult?.success && finnhubTestResult.configured ? (
+                    <div className="space-y-2 text-xs">
+                      <div className="grid gap-1 sm:grid-cols-2">
+                        <div className="rounded-md bg-background/80 px-2 py-1.5 border border-border">
+                          <span className="text-muted-foreground">
+                            {locale === 'ar' ? 'التفعيل / المفتاح / الرموز' : 'Enabled / key / symbols'}
+                          </span>
+                          <div className="font-mono tabular-nums mt-0.5">
+                            {finnhubTestResult.configured.enabled ? 'on' : 'off'} ·{' '}
+                            {finnhubTestResult.configured.hasKey ? 'key' : 'no-key'} ·{' '}
+                            {finnhubTestResult.configured.symbolCount}
+                          </div>
+                        </div>
+                        <div className="rounded-md bg-background/80 px-2 py-1.5 border border-border">
+                          <span className="text-muted-foreground">WebSocket</span>
+                          <div
+                            className={`mt-0.5 font-medium ${finnhubTestResult.websocket?.open ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-700 dark:text-amber-300'}`}
+                          >
+                            {finnhubTestResult.websocket?.open
+                              ? locale === 'ar'
+                                ? 'مفتوح على الخادم'
+                                : 'Open on server'
+                              : locale === 'ar'
+                                ? 'غير متصل (قد يكون طبيعياً للفوركس)'
+                                : 'Not connected (may be normal for FX)'}
+                          </div>
+                        </div>
+                      </div>
+                      <div
+                        className={`rounded-md px-2 py-1.5 border ${
+                          finnhubTestResult.rest?.ok
+                            ? 'border-emerald-500/30 bg-emerald-500/5'
+                            : 'border-amber-500/30 bg-amber-500/5'
+                        }`}
+                      >
+                        <span className="text-muted-foreground">REST / candles</span>
+                        <div className="mt-0.5">{finnhubTestResult.rest?.message}</div>
+                      </div>
+                      {finnhubTestResult.perSymbol && finnhubTestResult.perSymbol.length > 0 ? (
+                        <div className="max-h-48 overflow-auto rounded-md border border-border">
+                          <table className="w-full text-left text-[11px] sm:text-xs">
+                            <thead className="sticky top-0 bg-muted/90 backdrop-blur-sm">
+                              <tr className="border-b border-border">
+                                <th className="p-2 font-medium">Symbol</th>
+                                <th className="p-2 font-medium">Pair</th>
+                                <th className="p-2 font-medium">HTTP</th>
+                                <th className="p-2 font-medium">s</th>
+                                <th className="p-2 font-medium">Finnhub</th>
+                                <th className="p-2 font-medium">ECB</th>
+                                <th className="p-2 font-medium">{locale === 'ar' ? 'ملاحظة' : 'Note'}</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {finnhubTestResult.perSymbol.map((row, i) => (
+                                <tr key={`ft-${i}-${row.finnhubSymbol}`} className="border-b border-border/60">
+                                  <td className="p-2 font-mono break-all">{row.finnhubSymbol || '—'}</td>
+                                  <td className="p-2">{row.pair}</td>
+                                  <td className="p-2 tabular-nums">{row.httpStatus ?? '—'}</td>
+                                  <td className="p-2 font-mono">{row.finnhubStatus ?? '—'}</td>
+                                  <td className="p-2 tabular-nums">
+                                    {row.lastClose != null && row.lastClose > 0
+                                      ? Number(row.lastClose).toLocaleString(undefined, {
+                                          maximumFractionDigits: 6,
+                                        })
+                                      : '—'}
+                                  </td>
+                                  <td className="p-2 tabular-nums text-emerald-700 dark:text-emerald-400">
+                                    {row.fallbackClose != null && row.fallbackClose > 0
+                                      ? Number(row.fallbackClose).toLocaleString(undefined, {
+                                          maximumFractionDigits: 6,
+                                        })
+                                      : '—'}
+                                  </td>
+                                  <td className="p-2 text-muted-foreground break-words text-[11px]">
+                                    {[
+                                      row.fallbackSource === 'frankfurter'
+                                        ? locale === 'ar'
+                                          ? 'احتياط ECB'
+                                          : 'ECB fallback'
+                                        : row.fallbackSource === 'yahoo'
+                                          ? locale === 'ar'
+                                            ? 'احتياط Yahoo'
+                                            : 'Yahoo fallback'
+                                          : null,
+                                      row.error,
+                                      row.candleCount && row.lastClose != null && row.lastClose > 0
+                                        ? `${row.candleCount} candles`
+                                        : null,
+                                    ]
+                                      .filter(Boolean)
+                                      .join(' · ') || '—'}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : finnhubTestResult && !finnhubTestResult.success ? (
+                    <p className="text-xs text-destructive">
+                      {finnhubTestResult.error === 'network'
+                        ? locale === 'ar'
+                          ? 'فشل الاتصال'
+                          : 'Network error'
+                        : finnhubTestResult.error}
+                    </p>
+                  ) : null}
+                </div>
+
+                <Button
+                  type="button"
+                  className="w-full sm:w-auto bg-primary"
+                  disabled={savingFinnhub}
+                  onClick={() => void handleSaveFinnhubForex()}
+                >
+                  {savingFinnhub
+                    ? locale === 'ar'
+                      ? 'جاري الحفظ…'
+                      : 'Saving…'
+                    : locale === 'ar'
+                      ? 'حفظ إعدادات Finnhub'
+                      : 'Save Finnhub settings'}
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-card/50 border-border backdrop-blur-sm">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <DollarSign className="w-5 h-5 text-primary" />
+                  {locale === 'ar' ? 'البورصات العالمية' : 'Global market rates'}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                  {forexRates.map((forex, index) => (
+                    <div
+                      key={`fx-${index}-${forex.id ?? forex.pair}`}
+                      className="bg-muted/50 rounded-xl p-4 space-y-3"
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center -space-x-1">
+                          <MarketBadge code={forex.flag1} />
+                          <MarketBadge code={forex.flag2} />
+                        </div>
+                        <div className="min-w-0">
+                          <span className="block font-bold leading-snug">
+                            {adminForexPairTitle(forex, locale)}
+                          </span>
+                          <span className="block font-mono text-[11px] text-muted-foreground">
+                            {forex.pair}
+                          </span>
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <Label className="text-xs">{locale === 'ar' ? 'السعر' : 'Rate'}</Label>
+                          <Input
+                            type="number"
+                            step="0.0001"
+                            value={editingForex[forex.pair]?.rate || '0'}
+                            onChange={(e) => setEditingForex({
+                              ...editingForex,
+                              [forex.pair]: {
+                                ...editingForex[forex.pair],
+                                rate: e.target.value
+                              }
+                            })}
+                            className="mt-1 h-9"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs">{locale === 'ar' ? 'التغير %' : 'Change %'}</Label>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={editingForex[forex.pair]?.change || '0'}
+                            onChange={(e) => setEditingForex({
+                              ...editingForex,
+                              [forex.pair]: {
+                                ...editingForex[forex.pair],
+                                change: e.target.value
+                              }
+                            })}
+                            className="mt-1 h-9"
+                          />
+                        </div>
+                      </div>
+                      
+                      <Button 
+                        onClick={() => handleUpdateForex(forex.pair)}
+                        size="sm"
+                        className="w-full bg-green-600 hover:bg-green-700"
+                      >
+                        <Check className="w-4 h-4 ml-1" />
+                        {t('admin.save')}
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Tab 4: Crypto Rates */}
+          <TabsContent value="crypto" className="space-y-6">
+            <Card className="border-primary/20 bg-primary/5 backdrop-blur-sm">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Bitcoin className="h-5 w-5 text-primary" />
+                  {locale === 'ar' ? 'بث كريبتو حي من الخادم (CoinGecko)' : 'Server-side live crypto (CoinGecko)'}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <Switch
+                    checked={cryptoLiveForm.enabled}
+                    onCheckedChange={(v) => setCryptoLiveForm((p) => ({ ...p, enabled: v }))}
+                  />
+                  <Label className="text-sm">{locale === 'ar' ? 'تفعيل العرض الحي' : 'Enable live mode'}</Label>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-xs">{locale === 'ar' ? 'العملات المعروضة في الوضع الحي' : 'Codes shown in live mode'}</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {cryptoRates.map((c) => {
+                      const checked = cryptoLiveForm.codes.includes(c.code);
+                      return (
+                        <label key={`cr-live-${c.code}`} className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1 text-xs">
+                          <Checkbox
+                            checked={checked}
+                            onCheckedChange={(v) => {
+                              setCryptoLiveForm((p) => ({
+                                ...p,
+                                codes: v === true
+                                  ? [...new Set([...p.codes, c.code])]
+                                  : p.codes.filter((x) => x !== c.code),
+                              }));
+                            }}
+                          />
+                          <span>{c.code}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" onClick={() => void handleSaveCryptoLive()} disabled={savingCryptoLive}>
+                    {savingCryptoLive ? (locale === 'ar' ? 'جاري الحفظ…' : 'Saving…') : (locale === 'ar' ? 'حفظ إعدادات الكريبتو الحي' : 'Save live crypto settings')}
+                  </Button>
+                  <Button type="button" variant="secondary" onClick={() => void handleCryptoLiveTest()} disabled={cryptoLiveTestLoading}>
+                    {cryptoLiveTestLoading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 me-1 animate-spin" />
+                        {locale === 'ar' ? 'اختبار…' : 'Testing…'}
+                      </>
+                    ) : (
+                      locale === 'ar' ? 'اختبار البيانات' : 'Test data'
+                    )}
+                  </Button>
+                </div>
+
+                {cryptoLiveTestResult?.success ? (
+                  <div className="rounded-md border border-border bg-background/70 p-3 text-xs space-y-2">
+                    <div className="text-muted-foreground">
+                      {locale === 'ar' ? 'الحالة' : 'Status'}: {cryptoLiveTestResult.result?.message}
+                    </div>
+                    {cryptoLiveTestResult.rows && cryptoLiveTestResult.rows.length > 0 ? (
+                      <div className="grid gap-1 sm:grid-cols-2">
+                        {cryptoLiveTestResult.rows.map((r) => (
+                          <div key={`crt-${r.code}`} className="rounded border border-border px-2 py-1 tabular-nums">
+                            <span className="font-medium">{r.code}</span>
+                            {' · '}
+                            {r.ok ? (
+                              <span>
+                                {Number(r.price ?? 0).toLocaleString(undefined, { maximumFractionDigits: 3 })}
+                                {' / '}
+                                {(r.change ?? 0).toFixed(2)}%
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+              </CardContent>
+            </Card>
+
+            <Card className="bg-card/50 border-border backdrop-blur-sm">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <span className="text-2xl">₿</span>
+                  {locale === 'ar' ? 'العملات الرقمية' : 'Cryptocurrencies'}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  {cryptoRates.map((crypto, index) => (
+                    <div
+                      key={`cr-${index}-${crypto.id ?? crypto.code}`}
+                      className="bg-muted/50 rounded-xl p-4 space-y-3"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-3xl w-10 h-10 flex items-center justify-center bg-primary/10 rounded-xl">{crypto.icon || '₿'}</span>
+                        <div>
+                          <p className="font-bold">{crypto.code}</p>
+                          <p className="text-sm text-muted-foreground">{locale === 'ar' ? crypto.nameAr : crypto.nameEn}</p>
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <Label className="text-xs">{locale === 'ar' ? 'السعر ($)' : 'Price ($)'}</Label>
+                          <Input
+                            type="number"
+                            step="0.0001"
+                            value={editingCrypto[crypto.code]?.price || '0'}
+                            onChange={(e) => setEditingCrypto({
+                              ...editingCrypto,
+                              [crypto.code]: {
+                                ...editingCrypto[crypto.code],
+                                price: e.target.value
+                              }
+                            })}
+                            className="mt-1 h-9"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs">{locale === 'ar' ? 'التغير %' : 'Change %'}</Label>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={editingCrypto[crypto.code]?.change || '0'}
+                            onChange={(e) => setEditingCrypto({
+                              ...editingCrypto,
+                              [crypto.code]: {
+                                ...editingCrypto[crypto.code],
+                                change: e.target.value
+                              }
+                            })}
+                            className="mt-1 h-9"
+                          />
+                        </div>
+                      </div>
+                      
+                      <Button 
+                        onClick={() => handleUpdateCrypto(crypto.code)}
+                        size="sm"
+                        className="w-full bg-green-600 hover:bg-green-700"
+                      >
+                        <Check className="w-4 h-4 ml-1" />
+                        {t('admin.save')}
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Tab 5: SP Today Sync */}
+          <TabsContent value="sync" className="space-y-6">
+            <Card className="bg-card/50 border-border backdrop-blur-sm">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Download className="w-5 h-5 text-primary" />
+                  {locale === 'ar' ? 'مزامنة الأسعار مع SP Today' : 'Sync Rates from SP Today'}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {syncSettings.lastFetchTime && (
+                  <div className="bg-primary/10 border border-primary/20 rounded-lg p-3 flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-primary shrink-0" />
+                    <span className="text-sm">
+                      {locale === 'ar' ? 'آخر مزامنة عامة:' : 'Last full sync:'}{' '}
+                      {formatTime(syncSettings.lastFetchTime)}
+                    </span>
+                  </div>
+                )}
+
+                <div className="bg-muted/50 rounded-lg p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div>
+                    <Label className="text-sm font-medium">
+                      {locale === 'ar' ? 'التحديث التلقائي' : 'Auto update'}
+                    </Label>
+                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                      {locale === 'ar'
+                        ? 'المؤقّت الداخلي يعمل فقط عند تشغيل الموقع كعملية خادم مستمرة (مثل Docker أو VPS مع `node`/Bun لتشغيل standalone). على استضافة بجلسات قصيرة لن يبقى المؤقّت فعّالاً—جدّول طلباً دورياً إلى `https://نطاقك/api/cron?secret=…` (cron أو curl). يفحص المؤقّت الجدولة كل دقيقة تقريباً (`INTERNAL_CRON_MS`)؛ تنزيل الأسعار يتم حسب «الفترة بالدقائق» لكل فئة أدناه (العملات/الذهب/المحروقات فقط تلقائياً). `DISABLE_INTERNAL_CRON=1` يعطّل الداخلي على الخادم الدائم إن استخدمت cron خارجياً.'
+                        : 'The internal timer only works when the app runs as one long-lived server process (e.g. Docker/VPS with `node` or Bun running the standalone server). On short-lived serverless hosting it will not keep running—schedule `GET https://your-domain/api/cron?secret=…` (cron or curl) every minute. The timer checks the schedule about every minute (`INTERNAL_CRON_MS`); actual fetches follow each category’s «minutes» interval below (only currencies, gold, fuel in auto mode). Use `DISABLE_INTERNAL_CRON=1` on a persistent host if you rely on an external cron instead.'}
+                    </p>
+                  </div>
+                  <Switch
+                    checked={syncSettings.autoUpdateEnabled}
+                    onCheckedChange={(checked) => setSyncSettings({ ...syncSettings, autoUpdateEnabled: checked })}
+                  />
+                </div>
+
+                <div className="space-y-3">
+                  {SYNC_TAB_CATEGORY_IDS.map((id, syncIndex) => {
+                    const cat = resolvedSyncConfig().categories[id];
+                    const label = SYNC_CATEGORY_LABEL[id];
+                    const last = resolvedSyncConfig().lastFetchedAt[id];
+                    return (
+                      <div
+                        key={`sync-cat-${id}-${syncIndex}`}
+                        className="rounded-xl border border-border bg-muted/30 p-4 space-y-3"
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <Switch
+                                checked={cat.enabled}
+                                onCheckedChange={(checked) => patchSyncCategory(id, { enabled: checked })}
+                              />
+                              <span className="font-medium">
+                                {locale === 'ar' ? label.ar : label.en}
+                              </span>
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-1 ms-1">
+                              {locale === 'ar' ? label.hintAr : label.hintEn}
+                            </p>
+                            {last && (
+                              <p className="text-xs text-muted-foreground mt-1 ms-1 flex items-center gap-1">
+                                <Clock className="w-3 h-3" />
+                                {locale === 'ar' ? 'آخر جلب لهذه الفئة:' : 'Last fetch:'}{' '}
+                                {formatTime(last)}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                          <div>
+                            <Label className="text-xs">
+                              {locale === 'ar' ? 'كل كم ساعة؟' : 'Every (hours)'}
+                            </Label>
+                            <Input
+                              type="number"
+                              min={1}
+                              max={168}
+                              className="mt-1 h-9"
+                              value={Math.max(1, Math.round(cat.intervalMinutes / 60))}
+                              onChange={(e) => {
+                                const h = parseInt(e.target.value, 10) || 1;
+                                patchSyncCategory(id, { intervalMinutes: h * 60 });
+                              }}
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-xs">
+                              {locale === 'ar' ? 'نوع التعديل' : 'Adjustment'}
+                            </Label>
+                            <select
+                              className="mt-1 flex h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                              value={cat.adjustmentMode}
+                              onChange={(e) =>
+                                patchSyncCategory(id, {
+                                  adjustmentMode: e.target.value as 'fixed' | 'percent',
+                                })
+                              }
+                            >
+                              <option value="fixed">
+                                {locale === 'ar' ? 'رقم ثابت' : 'Fixed amount'}
+                              </option>
+                              <option value="percent">
+                                {locale === 'ar' ? 'نسبة مئوية %' : 'Percent %'}
+                              </option>
+                            </select>
+                          </div>
+                          <div>
+                            <Label className="text-xs">
+                              {cat.adjustmentMode === 'percent'
+                                ? locale === 'ar'
+                                  ? 'النسبة %'
+                                  : 'Percent'
+                                : id === 'gold' || id === 'crypto'
+                                  ? locale === 'ar'
+                                    ? 'القيمة (دولار)'
+                                    : 'Amount (USD)'
+                                  : locale === 'ar'
+                                    ? 'القيمة (ل.س)'
+                                    : 'Amount (SYP)'}
+                            </Label>
+                            <Input
+                              type="number"
+                              min={0}
+                              step={cat.adjustmentMode === 'percent' ? 0.1 : id === 'gold' || id === 'crypto' ? 0.01 : 50}
+                              className="mt-1 h-9"
+                              value={cat.adjustmentValue}
+                              onChange={(e) =>
+                                patchSyncCategory(id, {
+                                  adjustmentValue: parseFloat(e.target.value) || 0,
+                                })
+                              }
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-xs">
+                              {locale === 'ar' ? 'اتجاه التعديل' : 'Direction'}
+                            </Label>
+                            <div className="flex gap-1 mt-1">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant={cat.adjustmentDirection === 'deduction' ? 'default' : 'outline'}
+                                className="flex-1 h-9 px-2 text-xs"
+                                onClick={() => patchSyncCategory(id, { adjustmentDirection: 'deduction' })}
+                              >
+                                <TrendingDown className="w-3 h-3 mr-0.5" />
+                                {locale === 'ar' ? 'تقليل' : 'Less'}
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant={cat.adjustmentDirection === 'addition' ? 'default' : 'outline'}
+                                className="flex-1 h-9 px-2 text-xs"
+                                onClick={() => patchSyncCategory(id, { adjustmentDirection: 'addition' })}
+                              >
+                                <TrendingUp className="w-3 h-3 mr-0.5" />
+                                {locale === 'ar' ? 'زيادة' : 'More'}
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <Button onClick={handleFetchFromSPToday} disabled={isFetching} className="flex-1">
+                    {isFetching ? (
+                      <RefreshCw className="w-4 h-4 ml-1 animate-spin" />
+                    ) : (
+                      <Download className="w-4 h-4 ml-1" />
+                    )}
+                    {locale === 'ar' ? 'جلب كل الفئات المفعّلة الآن' : 'Fetch all enabled now'}
+                  </Button>
+
+                  <Button
+                    onClick={handleUpdateSyncSettings}
+                    disabled={savingSettings}
+                    variant="outline"
+                    className="flex-1"
+                  >
+                    {savingSettings ? (
+                      <RefreshCw className="w-4 h-4 ml-1 animate-spin" />
+                    ) : (
+                      <Check className="w-4 h-4 ml-1" />
+                    )}
+                    {locale === 'ar' ? 'حفظ إعدادات المزامنة' : 'Save sync settings'}
+                  </Button>
+                </div>
+
+                <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3 text-sm text-blue-600 dark:text-blue-400">
+                    {locale === 'ar'
+                    ? 'الرقم الثابت: يُخصم أو يُضاف لسعري شراء/بيع العملات، أو لسعر الذهب بالدولار، أو للمحروقات بالليرة. النسبة: على القيمة كاملة. تحديث الفوركس والعملات الرقمية من تبويباتها في لوحة التحكم وليس من المزامنة التلقائية هنا.'
+                    : 'Fixed: buy/sell (currencies), gold in USD, or fuel in SYP. Percent: full value. Forex and crypto are updated from their admin tabs, not from this auto-sync tab.'}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Tab 3: Site Identity */}
+          <TabsContent value="identity" className="space-y-6">
+            <Card className="bg-card/50 border-border backdrop-blur-sm">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Globe className="w-5 h-5 text-primary" />
+                  {locale === 'ar' ? 'هوية الموقع' : 'Site Identity'}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Site Names */}
+                <div className="grid gap-6 md:grid-cols-2">
+                  {/* Site Name Arabic */}
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">
+                      {locale === 'ar' ? 'اسم الموقع (عربي)' : 'Site Name (Arabic)'}
+                    </Label>
+                    <Input
+                      value={siteIdentity.siteNameAr}
+                      onChange={(e) => setSiteIdentity({...siteIdentity, siteNameAr: e.target.value})}
+                      placeholder="سعر الليرة السورية"
+                      dir="rtl"
+                    />
+                  </div>
+
+                  {/* Site Name English */}
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">
+                      {locale === 'ar' ? 'اسم الموقع (إنجليزي)' : 'Site Name (English)'}
+                    </Label>
+                    <Input
+                      value={siteIdentity.siteNameEn}
+                      onChange={(e) => setSiteIdentity({...siteIdentity, siteNameEn: e.target.value})}
+                      placeholder="Syrian Pound Exchange Rate"
+                      dir="ltr"
+                    />
+                  </div>
+                </div>
+
+                {/* Hero Subtitles */}
+                <div className="grid gap-6 md:grid-cols-2">
+                  {/* Hero Subtitle Arabic */}
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">
+                      {locale === 'ar' ? 'النص الترحيبي (عربي)' : 'Hero Subtitle (Arabic)'}
+                    </Label>
+                    <Input
+                      value={siteIdentity.heroSubtitleAr}
+                      onChange={(e) => setSiteIdentity({...siteIdentity, heroSubtitleAr: e.target.value})}
+                      placeholder="أسعار الصرف الحية"
+                      dir="rtl"
+                    />
+                  </div>
+
+                  {/* Hero Subtitle English */}
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">
+                      {locale === 'ar' ? 'النص الترحيبي (إنجليزي)' : 'Hero Subtitle (English)'}
+                    </Label>
+                    <Input
+                      value={siteIdentity.heroSubtitleEn}
+                      onChange={(e) => setSiteIdentity({...siteIdentity, heroSubtitleEn: e.target.value})}
+                      placeholder="Live Exchange Rates"
+                      dir="ltr"
+                    />
+                  </div>
+                </div>
+
+                {/* Ticker speed (above header) */}
+                <div className="space-y-4 rounded-lg border border-border bg-muted/20 p-4">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <Gauge className="h-4 w-4 text-primary" />
+                    {locale === 'ar' ? 'سرعة شريط الأسعار (فوق الترويسة)' : 'Ticker speed (above header)'}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {locale === 'ar'
+                      ? 'المدة بالثواني لإكمال دورة التمرير. قيمة أقل = حركة أسرع. يُنصح بين 20 و 90 ثانية.'
+                      : 'Seconds for one full scroll cycle. Lower = faster. Try 20–90s.'}
+                  </p>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                    <Slider
+                      className="flex-1 py-2"
+                      min={8}
+                      max={180}
+                      step={1}
+                      value={[siteIdentity.tickerMarqueeDurationSec]}
+                      onValueChange={(v) => {
+                        const n = v[0] ?? 42;
+                        setSiteIdentity((prev) => ({ ...prev, tickerMarqueeDurationSec: n }));
+                      }}
+                    />
+                    <div className="flex shrink-0 items-center gap-2 sm:w-36">
+                      <Input
+                        type="number"
+                        min={8}
+                        max={180}
+                        className="h-9 w-20 font-mono text-sm"
+                        value={siteIdentity.tickerMarqueeDurationSec}
+                        onChange={(e) => {
+                          const raw = parseInt(e.target.value, 10);
+                          if (!Number.isFinite(raw)) return;
+                          setSiteIdentity((prev) => ({
+                            ...prev,
+                            tickerMarqueeDurationSec: Math.min(180, Math.max(8, raw)),
+                          }));
+                        }}
+                      />
+                      <span className="text-xs text-muted-foreground whitespace-nowrap">
+                        {locale === 'ar' ? 'ثانية / دورة' : 'sec / loop'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Logo: Arabic + non-Arabic + sizes */}
+                <div className="space-y-4 rounded-lg border border-border bg-muted/20 p-4">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <ImageIcon className="w-4 h-4" />
+                    {locale === 'ar' ? 'الشعارات حسب اللغة' : 'Logos by language'}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {locale === 'ar'
+                      ? 'شعار للعربية وشعار لباقي اللغات. إن تُرك «باقي اللغات» فارغاً يُعرض شعار العربية ثم «شعار موحّد» القديم إن وُجد — حتى لا يبقى الموقع على الشعار الافتراضي.'
+                      : 'Arabic vs other locales. If non-Arabic logo is empty, the Arabic logo is shown, then the legacy unified field — so English etc. are not stuck on the default SVG unless you clear all.'}
+                  </p>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2 rounded-md border border-border/80 bg-background/50 p-3">
+                      <Label className="text-sm font-medium">
+                        {locale === 'ar' ? 'شعار الواجهة العربية' : 'Arabic UI logo'}
+                      </Label>
+                      <Input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+                        disabled={uploadingLogo}
+                        className="cursor-pointer"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          void handleLogoFile(f ?? null, 'ar');
+                          e.target.value = '';
+                        }}
+                      />
+                      <Label className="text-xs text-muted-foreground">
+                        {locale === 'ar' ? 'أو رابط (اختياري)' : 'Or URL (optional)'}
+                      </Label>
+                      <Input
+                        value={siteIdentity.logoUrlAr || ''}
+                        onChange={(e) =>
+                          setSiteIdentity({ ...siteIdentity, logoUrlAr: e.target.value || null })
+                        }
+                        placeholder="/uploads/logo-ar-....png"
+                        dir="ltr"
+                      />
+                    </div>
+                    <div className="space-y-2 rounded-md border border-border/80 bg-background/50 p-3">
+                      <Label className="text-sm font-medium">
+                        {locale === 'ar' ? 'شعار باقي اللغات' : 'Non-Arabic locales logo'}
+                      </Label>
+                      <Input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+                        disabled={uploadingLogo}
+                        className="cursor-pointer"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          void handleLogoFile(f ?? null, 'nonAr');
+                          e.target.value = '';
+                        }}
+                      />
+                      <Label className="text-xs text-muted-foreground">
+                        {locale === 'ar' ? 'أو رابط (اختياري)' : 'Or URL (optional)'}
+                      </Label>
+                      <Input
+                        value={siteIdentity.logoUrlNonAr || ''}
+                        onChange={(e) =>
+                          setSiteIdentity({ ...siteIdentity, logoUrlNonAr: e.target.value || null })
+                        }
+                        placeholder="/uploads/logo-non-....png"
+                        dir="ltr"
+                      />
+                    </div>
+                  </div>
+
+                  {uploadingLogo && (
+                    <p className="text-xs text-muted-foreground flex items-center gap-2">
+                      <RefreshCw className="h-3 w-3 animate-spin" />
+                      {locale === 'ar' ? 'جاري الرفع…' : 'Uploading…'}
+                    </p>
+                  )}
+
+                  <div className="space-y-2 border-t border-border pt-3">
+                    <Label className="text-xs text-muted-foreground">
+                      {locale === 'ar'
+                        ? 'شعار موحّد (قديم — احتياطي إذا لم تُضبط الأعلى)'
+                        : 'Legacy unified logo URL (fallback)'}
+                    </Label>
+                    <Input
+                      value={siteIdentity.logoUrl || ''}
+                      onChange={(e) => setSiteIdentity({ ...siteIdentity, logoUrl: e.target.value || null })}
+                      placeholder="https://example.com/logo.png أو /uploads/..."
+                      dir="ltr"
+                    />
+                  </div>
+
+                  <div className="grid gap-4 sm:grid-cols-3">
+                    {(
+                      [
+                        { key: 'header' as const, ar: 'شريط التنقل (الهيدر)', en: 'Header (navbar)' },
+                        { key: 'footer' as const, ar: 'تذييل الصفحة', en: 'Footer' },
+                        { key: 'loading' as const, ar: 'شاشة التحميل الافتراضية', en: 'Default loading screen' },
+                      ] as const
+                    ).map(({ key, ar, en }) => (
+                      <div key={key} className="space-y-2">
+                        <Label className="text-xs font-medium">{locale === 'ar' ? ar : en}</Label>
+                        <div className="flex items-center gap-2">
+                          <Input
+                            type="number"
+                            min={16}
+                            max={512}
+                            className="h-9"
+                            value={siteIdentity.logoSizes[key]}
+                            onChange={(e) => {
+                              const v = parseInt(e.target.value, 10);
+                              if (!Number.isFinite(v)) return;
+                              setSiteIdentity({
+                                ...siteIdentity,
+                                logoSizes: { ...siteIdentity.logoSizes, [key]: v },
+                              });
+                            }}
+                          />
+                          <span className="text-xs text-muted-foreground whitespace-nowrap">px</span>
+                        </div>
+                        <input
+                          type="range"
+                          min={16}
+                          max={512}
+                          value={siteIdentity.logoSizes[key]}
+                          onChange={(e) =>
+                            setSiteIdentity({
+                              ...siteIdentity,
+                              logoSizes: {
+                                ...siteIdentity.logoSizes,
+                                [key]: parseInt(e.target.value, 10),
+                              },
+                            })
+                          }
+                          className="w-full accent-primary"
+                        />
+                      </div>
+                    ))}
+                  </div>
+
+                  {(siteIdentity.logoUrlAr ||
+                    siteIdentity.logoUrlNonAr ||
+                    siteIdentity.logoUrl) && (
+                    <div className="mt-2 space-y-3 rounded-md border border-dashed border-border p-3">
+                      <p className="text-xs text-muted-foreground">
+                        {locale === 'ar' ? 'معاينة الأحجام (عربي | باقي اللغات):' : 'Size previews (AR | other locales):'}
+                      </p>
+                      {(['header', 'footer', 'loading'] as const).map((slot) => (
+                        <div key={slot} className="space-y-1">
+                          <p className="text-[10px] font-medium uppercase text-muted-foreground">{slot}</p>
+                          <div className="flex flex-wrap items-end gap-4">
+                            <div className="text-center">
+                              <p className="mb-0.5 text-[10px] text-muted-foreground">AR</p>
+                              <img
+                                key={`prev-ar-${slot}-${siteIdentity.logoUrlAr || siteIdentity.logoUrl || ''}`}
+                                src={resolveLogoUrlForClient(
+                                  siteIdentity.logoUrlAr || siteIdentity.logoUrl
+                                )}
+                                alt=""
+                                className="mx-auto object-contain"
+                                style={{
+                                  height: siteIdentity.logoSizes[slot],
+                                  width: 'auto',
+                                  maxWidth: slot === 'header' ? 280 : 200,
+                                }}
+                              />
+                            </div>
+                            <div className="text-center">
+                              <p className="mb-0.5 text-[10px] text-muted-foreground">
+                                {locale === 'ar' ? 'غير عربي' : 'Non-AR'}
+                              </p>
+                              <img
+                                src={resolveLogoUrlForClient(
+                                  siteIdentity.logoUrlNonAr || siteIdentity.logoUrl
+                                )}
+                                alt=""
+                                className="mx-auto object-contain"
+                                style={{
+                                  height: siteIdentity.logoSizes[slot],
+                                  width: 'auto',
+                                  maxWidth: slot === 'header' ? 280 : 200,
+                                }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Footer social (public site) */}
+                <div className="space-y-4 rounded-lg border border-border bg-muted/20 p-4">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <Share2 className="h-4 w-4 text-primary" />
+                    {locale === 'ar' ? 'روابط التواصل في التذييل' : 'Footer social links'}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {locale === 'ar'
+                      ? 'اترك الحقل فارغاً لإخفاء الزر. يُضاف https:// تلقائياً عند الحاجة.'
+                      : 'Leave empty to hide a button. https:// is added when missing.'}
+                  </p>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label className="text-xs">Facebook</Label>
+                      <Input
+                        dir="ltr"
+                        placeholder="https://facebook.com/..."
+                        value={siteIdentity.footerSocialFacebook}
+                        onChange={(e) =>
+                          setSiteIdentity({ ...siteIdentity, footerSocialFacebook: e.target.value })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs">X (Twitter)</Label>
+                      <Input
+                        dir="ltr"
+                        placeholder="https://x.com/..."
+                        value={siteIdentity.footerSocialX}
+                        onChange={(e) =>
+                          setSiteIdentity({ ...siteIdentity, footerSocialX: e.target.value })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs">Telegram</Label>
+                      <Input
+                        dir="ltr"
+                        placeholder="https://t.me/..."
+                        value={siteIdentity.footerSocialTelegram}
+                        onChange={(e) =>
+                          setSiteIdentity({ ...siteIdentity, footerSocialTelegram: e.target.value })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs">Instagram</Label>
+                      <Input
+                        dir="ltr"
+                        placeholder="https://instagram.com/..."
+                        value={siteIdentity.footerSocialInstagram}
+                        onChange={(e) =>
+                          setSiteIdentity({ ...siteIdentity, footerSocialInstagram: e.target.value })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2 sm:col-span-2">
+                      <Label className="text-xs">YouTube</Label>
+                      <Input
+                        dir="ltr"
+                        placeholder="https://youtube.com/..."
+                        value={siteIdentity.footerSocialYoutube}
+                        onChange={(e) =>
+                          setSiteIdentity({ ...siteIdentity, footerSocialYoutube: e.target.value })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2 sm:col-span-2">
+                      <Label className="text-xs">TikTok</Label>
+                      <Input
+                        dir="ltr"
+                        placeholder="https://www.tiktok.com/@..."
+                        value={siteIdentity.footerSocialTiktok}
+                        onChange={(e) =>
+                          setSiteIdentity({ ...siteIdentity, footerSocialTiktok: e.target.value })
+                        }
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Preview */}
+                <div className="bg-muted/50 rounded-lg p-4">
+                  <p className="text-sm text-muted-foreground mb-3">
+                    {locale === 'ar' ? 'معاينة:' : 'Preview:'}
+                  </p>
+                  <div className="bg-background rounded-lg p-4">
+                    <div className="mb-3 flex flex-wrap items-center gap-4">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-muted-foreground">AR</span>
+                        <img
+                          key={`hdr-ar-${siteIdentity.logoUrlAr || siteIdentity.logoUrl || ''}`}
+                          src={resolveLogoUrlForClient(
+                            siteIdentity.logoUrlAr || siteIdentity.logoUrl
+                          )}
+                          alt=""
+                          className="w-auto object-contain"
+                          style={{
+                            height: siteIdentity.logoSizes.header,
+                            maxHeight: siteIdentity.logoSizes.header,
+                          }}
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-muted-foreground">
+                          {locale === 'ar' ? 'غير عربي' : 'Non-AR'}
+                        </span>
+                        <img
+                          key={`hdr-non-${siteIdentity.logoUrlNonAr || siteIdentity.logoUrl || ''}`}
+                          src={resolveLogoUrlForClient(
+                            siteIdentity.logoUrlNonAr || siteIdentity.logoUrl
+                          )}
+                          alt=""
+                          className="w-auto object-contain"
+                          style={{
+                            height: siteIdentity.logoSizes.header,
+                            maxHeight: siteIdentity.logoSizes.header,
+                          }}
+                        />
+                      </div>
+                    </div>
+                    <p className="mb-2 font-bold text-lg">
+                      {locale === 'ar' ? siteIdentity.siteNameAr : siteIdentity.siteNameEn}
+                    </p>
+                    <p className="text-muted-foreground">
+                      {locale === 'ar' ? siteIdentity.heroSubtitleAr : siteIdentity.heroSubtitleEn}
+                    </p>
+                  </div>
+                </div>
+
+                <Button 
+                  onClick={handleUpdateSiteIdentity}
+                  disabled={savingSettings}
+                  className="w-full"
+                >
+                  {savingSettings ? (
+                    <RefreshCw className="w-4 h-4 ml-1 animate-spin" />
+                  ) : (
+                    <Check className="w-4 h-4 ml-1" />
+                  )}
+                  {locale === 'ar' ? 'حفظ هوية الموقع' : 'Save Site Identity'}
+                </Button>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Tab 4: Visual Identity */}
+          <TabsContent value="visual" className="space-y-6">
+            {/* Light Mode Colors */}
+            <Card className="bg-card/50 border-border backdrop-blur-sm">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <span className="text-2xl">☀️</span>
+                  {locale === 'ar' ? 'ألوان الوضع النهاري' : 'Light Mode Colors'}
+                </CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  {locale === 'ar'
+                    ? 'يُشتق تلقائياً من هذه القيم: خلفية الصفحة، نصوص، بطاقات، حدود، ألوان ثانوية وتمييز — بما يحافظ على تباين مقروء.'
+                    : 'These three anchors drive the full light theme: page background, text, cards, borders, secondary/muted tones — tuned for readable contrast.'}
+                </p>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-6 md:grid-cols-3">
+                  {/* Primary Color */}
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">
+                      {locale === 'ar' ? 'اللون الأساسي' : 'Primary Color'}
+                    </Label>
+                    <div className="flex gap-2">
+                      <Input
+                        type="color"
+                        value={visualIdentity.lightPrimaryColor}
+                        onChange={(e) => setVisualIdentity({...visualIdentity, lightPrimaryColor: e.target.value})}
+                        className="w-14 h-10 p-1 cursor-pointer"
+                      />
+                      <Input
+                        value={visualIdentity.lightPrimaryColor}
+                        onChange={(e) => setVisualIdentity({...visualIdentity, lightPrimaryColor: e.target.value})}
+                        className="flex-1"
+                        dir="ltr"
+                      />
+                    </div>
+                    <div 
+                      className="h-8 rounded-lg" 
+                      style={{ backgroundColor: visualIdentity.lightPrimaryColor }}
+                    />
+                  </div>
+
+                  {/* Accent Color */}
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">
+                      {locale === 'ar' ? 'اللون المميز' : 'Accent Color'}
+                    </Label>
+                    <div className="flex gap-2">
+                      <Input
+                        type="color"
+                        value={visualIdentity.lightAccentColor}
+                        onChange={(e) => setVisualIdentity({...visualIdentity, lightAccentColor: e.target.value})}
+                        className="w-14 h-10 p-1 cursor-pointer"
+                      />
+                      <Input
+                        value={visualIdentity.lightAccentColor}
+                        onChange={(e) => setVisualIdentity({...visualIdentity, lightAccentColor: e.target.value})}
+                        className="flex-1"
+                        dir="ltr"
+                      />
+                    </div>
+                    <div 
+                      className="h-8 rounded-lg" 
+                      style={{ backgroundColor: visualIdentity.lightAccentColor }}
+                    />
+                  </div>
+
+                  {/* Background Color */}
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">
+                      {locale === 'ar' ? 'لون الخلفية' : 'Background Color'}
+                    </Label>
+                    <div className="flex gap-2">
+                      <Input
+                        type="color"
+                        value={visualIdentity.lightBgColor}
+                        onChange={(e) => setVisualIdentity({...visualIdentity, lightBgColor: e.target.value})}
+                        className="w-14 h-10 p-1 cursor-pointer"
+                      />
+                      <Input
+                        value={visualIdentity.lightBgColor}
+                        onChange={(e) => setVisualIdentity({...visualIdentity, lightBgColor: e.target.value})}
+                        className="flex-1"
+                        dir="ltr"
+                      />
+                    </div>
+                    <div 
+                      className="h-8 rounded-lg border" 
+                      style={{ backgroundColor: visualIdentity.lightBgColor }}
+                    />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Dark Mode Colors */}
+            <Card className="bg-card/50 border-border backdrop-blur-sm">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <span className="text-2xl">🌙</span>
+                  {locale === 'ar' ? 'ألوان الوضع الليلي' : 'Dark Mode Colors'}
+                </CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  {locale === 'ar'
+                    ? 'نفس المنطق للوضع الليلي: أسطح أغمق قليلاً للبطاقات، نص فاتح، وحدود خافتة متناسقة مع لونك الأساسي.'
+                    : 'Dark pack uses the same system: slightly lifted cards, light text, subtle borders aligned to your primary.'}
+                </p>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-6 md:grid-cols-3">
+                  {/* Primary Color */}
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">
+                      {locale === 'ar' ? 'اللون الأساسي' : 'Primary Color'}
+                    </Label>
+                    <div className="flex gap-2">
+                      <Input
+                        type="color"
+                        value={visualIdentity.darkPrimaryColor}
+                        onChange={(e) => setVisualIdentity({...visualIdentity, darkPrimaryColor: e.target.value})}
+                        className="w-14 h-10 p-1 cursor-pointer"
+                      />
+                      <Input
+                        value={visualIdentity.darkPrimaryColor}
+                        onChange={(e) => setVisualIdentity({...visualIdentity, darkPrimaryColor: e.target.value})}
+                        className="flex-1"
+                        dir="ltr"
+                      />
+                    </div>
+                    <div 
+                      className="h-8 rounded-lg" 
+                      style={{ backgroundColor: visualIdentity.darkPrimaryColor }}
+                    />
+                  </div>
+
+                  {/* Accent Color */}
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">
+                      {locale === 'ar' ? 'اللون المميز' : 'Accent Color'}
+                    </Label>
+                    <div className="flex gap-2">
+                      <Input
+                        type="color"
+                        value={visualIdentity.darkAccentColor}
+                        onChange={(e) => setVisualIdentity({...visualIdentity, darkAccentColor: e.target.value})}
+                        className="w-14 h-10 p-1 cursor-pointer"
+                      />
+                      <Input
+                        value={visualIdentity.darkAccentColor}
+                        onChange={(e) => setVisualIdentity({...visualIdentity, darkAccentColor: e.target.value})}
+                        className="flex-1"
+                        dir="ltr"
+                      />
+                    </div>
+                    <div 
+                      className="h-8 rounded-lg" 
+                      style={{ backgroundColor: visualIdentity.darkAccentColor }}
+                    />
+                  </div>
+
+                  {/* Background Color */}
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">
+                      {locale === 'ar' ? 'لون الخلفية' : 'Background Color'}
+                    </Label>
+                    <div className="flex gap-2">
+                      <Input
+                        type="color"
+                        value={visualIdentity.darkBgColor}
+                        onChange={(e) => setVisualIdentity({...visualIdentity, darkBgColor: e.target.value})}
+                        className="w-14 h-10 p-1 cursor-pointer"
+                      />
+                      <Input
+                        value={visualIdentity.darkBgColor}
+                        onChange={(e) => setVisualIdentity({...visualIdentity, darkBgColor: e.target.value})}
+                        className="flex-1"
+                        dir="ltr"
+                      />
+                    </div>
+                    <div 
+                      className="h-8 rounded-lg border border-gray-600" 
+                      style={{ backgroundColor: visualIdentity.darkBgColor }}
+                    />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Hero section (home banner gradient + heading colors) */}
+            <Card className="bg-card/50 border-border backdrop-blur-sm">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Sparkles className="h-5 w-5 text-primary" />
+                  {locale === 'ar' ? 'قسم الهيرو (البانر الرئيسي)' : 'Hero banner (top section)'}
+                </CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  {locale === 'ar'
+                    ? 'تدرج ثلاثي المراحل (من — عبر — إلى) ولون العنوان ولون السطر التوضيحي لكل من الوضع النهاري والليلي. يُحفظ مع «حفظ الهوية البصرية».'
+                    : 'Three-stop gradient plus title and subtitle colors for light and dark. Saved with «Save Visual Identity».'}
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-8">
+                <div className="grid gap-8 lg:grid-cols-2">
+                  <div className="space-y-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      {locale === 'ar' ? 'هيرو — نهاري' : 'Hero — light'}
+                    </p>
+                    {(
+                      [
+                        {
+                          key: 'gradientFrom',
+                          labelAr: 'بداية التدرج',
+                          labelEn: 'Gradient start',
+                        },
+                        {
+                          key: 'gradientVia',
+                          labelAr: 'وسط التدرج',
+                          labelEn: 'Gradient mid',
+                        },
+                        {
+                          key: 'gradientTo',
+                          labelAr: 'نهاية التدرج',
+                          labelEn: 'Gradient end',
+                        },
+                        {
+                          key: 'text',
+                          labelAr: 'لون عنوان الهيرو',
+                          labelEn: 'Hero title color',
+                        },
+                      ] as const
+                    ).map((row) => (
+                      <div key={row.key} className="space-y-2">
+                        <Label className="text-sm font-medium">
+                          {locale === 'ar' ? row.labelAr : row.labelEn}
+                        </Label>
+                        <div className="flex gap-2">
+                          <Input
+                            type="color"
+                            value={heroLightPreview[row.key]}
+                            onChange={(e) => patchHeroLight({ [row.key]: e.target.value } as Partial<HeroThemeSide>)}
+                            className="h-10 w-14 shrink-0 cursor-pointer p-1"
+                          />
+                          <Input
+                            value={heroLightPreview[row.key]}
+                            onChange={(e) => patchHeroLight({ [row.key]: e.target.value } as Partial<HeroThemeSide>)}
+                            className="min-w-0 flex-1 font-mono text-sm"
+                            dir="ltr"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium">
+                        {locale === 'ar' ? 'لون السطر التوضيحي' : 'Subtitle / muted'}
+                      </Label>
+                      <Input
+                        value={heroLightPreview.muted}
+                        onChange={(e) => patchHeroLight({ muted: e.target.value })}
+                        className="font-mono text-sm"
+                        dir="ltr"
+                        placeholder="#475569"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      {locale === 'ar' ? 'هيرو — ليلي' : 'Hero — dark'}
+                    </p>
+                    {(
+                      [
+                        {
+                          key: 'gradientFrom',
+                          labelAr: 'بداية التدرج',
+                          labelEn: 'Gradient start',
+                        },
+                        {
+                          key: 'gradientVia',
+                          labelAr: 'وسط التدرج',
+                          labelEn: 'Gradient mid',
+                        },
+                        {
+                          key: 'gradientTo',
+                          labelAr: 'نهاية التدرج',
+                          labelEn: 'Gradient end',
+                        },
+                        {
+                          key: 'text',
+                          labelAr: 'لون عنوان الهيرو',
+                          labelEn: 'Hero title color',
+                        },
+                      ] as const
+                    ).map((row) => (
+                      <div key={`d-${row.key}`} className="space-y-2">
+                        <Label className="text-sm font-medium">
+                          {locale === 'ar' ? row.labelAr : row.labelEn}
+                        </Label>
+                        <div className="flex gap-2">
+                          <Input
+                            type="color"
+                            value={heroDarkPreview[row.key]}
+                            onChange={(e) => patchHeroDark({ [row.key]: e.target.value } as Partial<HeroThemeSide>)}
+                            className="h-10 w-14 shrink-0 cursor-pointer p-1"
+                          />
+                          <Input
+                            value={heroDarkPreview[row.key]}
+                            onChange={(e) => patchHeroDark({ [row.key]: e.target.value } as Partial<HeroThemeSide>)}
+                            className="min-w-0 flex-1 font-mono text-sm"
+                            dir="ltr"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium">
+                        {locale === 'ar' ? 'لون السطر التوضيحي' : 'Subtitle / muted'}
+                      </Label>
+                      <Input
+                        value={heroDarkPreview.muted}
+                        onChange={(e) => patchHeroDark({ muted: e.target.value })}
+                        className="font-mono text-sm"
+                        dir="ltr"
+                        placeholder="rgba(255,255,255,0.78)"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Preview */}
+            <Card className="bg-card/50 border-border backdrop-blur-sm">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Paintbrush className="w-5 h-5 text-primary" />
+                  {locale === 'ar' ? 'معاينة الألوان' : 'Color Preview'}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="mb-4 text-sm text-muted-foreground">
+                  {locale === 'ar'
+                    ? 'المعاينة تعكس متغيرات CSS كما يظهرها زوار الموقع (خلفية، نص، بطاقة، أزرار، نص ثانوي).'
+                    : 'Preview mirrors the CSS variable bundle visitors get (background, text, card, buttons, muted text).'}
+                </p>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      {locale === 'ar' ? 'معاينة نهاري' : 'Light preview'}
+                    </p>
+                    <div
+                      className="rounded-xl border border-dashed border-border/80 p-3"
+                      style={publicThemePreviewLight as CSSProperties}
+                    >
+                      <div
+                        className="rounded-lg border p-4 shadow-sm"
+                        style={{
+                          borderColor: 'var(--border)',
+                          background: 'var(--background)',
+                          color: 'var(--foreground)',
+                        }}
+                      >
+                        <div
+                          className="rounded-md border p-3"
+                          style={{
+                            borderColor: 'var(--border)',
+                            background: 'var(--card)',
+                            color: 'var(--card-foreground)',
+                          }}
+                        >
+                          <p className="text-sm font-semibold">{locale === 'ar' ? 'بطاقة' : 'Card'}</p>
+                          <p className="mt-1 text-xs" style={{ color: 'var(--muted-foreground)' }}>
+                            {locale === 'ar' ? 'نص ثانوي' : 'Muted body'}
+                          </p>
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <span
+                            className="rounded-md px-3 py-1.5 text-xs font-semibold"
+                            style={{
+                              background: 'var(--primary)',
+                              color: 'var(--primary-foreground)',
+                            }}
+                          >
+                            Primary
+                          </span>
+                          <span
+                            className="rounded-md px-3 py-1.5 text-xs font-semibold"
+                            style={{
+                              background: 'var(--accent)',
+                              color: 'var(--accent-foreground)',
+                            }}
+                          >
+                            Accent
+                          </span>
+                          <span
+                            className="rounded-md border px-3 py-1.5 text-xs font-medium"
+                            style={{
+                              borderColor: 'var(--border)',
+                              background: 'var(--muted)',
+                              color: 'var(--muted-foreground)',
+                            }}
+                          >
+                            {locale === 'ar' ? 'ثانوي' : 'Muted'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      {locale === 'ar' ? 'معاينة ليلي' : 'Dark preview'}
+                    </p>
+                    <div
+                      className="rounded-xl border border-dashed border-border/80 p-3"
+                      style={publicThemePreviewDark as CSSProperties}
+                    >
+                      <div
+                        className="rounded-lg border p-4 shadow-sm"
+                        style={{
+                          borderColor: 'var(--border)',
+                          background: 'var(--background)',
+                          color: 'var(--foreground)',
+                        }}
+                      >
+                        <div
+                          className="rounded-md border p-3"
+                          style={{
+                            borderColor: 'var(--border)',
+                            background: 'var(--card)',
+                            color: 'var(--card-foreground)',
+                          }}
+                        >
+                          <p className="text-sm font-semibold">{locale === 'ar' ? 'بطاقة' : 'Card'}</p>
+                          <p className="mt-1 text-xs" style={{ color: 'var(--muted-foreground)' }}>
+                            {locale === 'ar' ? 'نص ثانوي' : 'Muted body'}
+                          </p>
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <span
+                            className="rounded-md px-3 py-1.5 text-xs font-semibold"
+                            style={{
+                              background: 'var(--primary)',
+                              color: 'var(--primary-foreground)',
+                            }}
+                          >
+                            Primary
+                          </span>
+                          <span
+                            className="rounded-md px-3 py-1.5 text-xs font-semibold"
+                            style={{
+                              background: 'var(--accent)',
+                              color: 'var(--accent-foreground)',
+                            }}
+                          >
+                            Accent
+                          </span>
+                          <span
+                            className="rounded-md border px-3 py-1.5 text-xs font-medium"
+                            style={{
+                              borderColor: 'var(--border)',
+                              background: 'var(--muted)',
+                              color: 'var(--muted-foreground)',
+                            }}
+                          >
+                            {locale === 'ar' ? 'ثانوي' : 'Muted'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch">
+              <Button
+                type="button"
+                variant="outline"
+                className="sm:flex-1"
+                onClick={() => {
+                  setVisualIdentity({ ...DEFAULT_VISUAL_IDENTITY });
+                  toast({
+                    title: locale === 'ar' ? 'تمت الإعادة محلياً' : 'Reset locally',
+                    description:
+                      locale === 'ar'
+                        ? 'عُدت ألوان الموقع وقسم الهيرو إلى الافتراضي في النموذج. اضغط «حفظ الهوية البصرية» لتطبيقها على الموقع.'
+                        : 'Brand colors and hero banner were reset to defaults in this form. Click «Save Visual Identity» to apply on the site.',
+                  });
+                }}
+              >
+                <RotateCcw className="me-2 h-4 w-4" />
+                {locale === 'ar' ? 'استعادة الافتراضي' : 'Restore defaults'}
+              </Button>
+              <Button
+                onClick={handleUpdateVisualIdentity}
+                disabled={savingSettings}
+                className="sm:flex-[2]"
+              >
+                {savingSettings ? (
+                  <RefreshCw className="w-4 h-4 ml-1 animate-spin" />
+                ) : (
+                  <Check className="w-4 h-4 ml-1" />
+                )}
+                {locale === 'ar' ? 'حفظ الهوية البصرية' : 'Save Visual Identity'}
+              </Button>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="searchConsole" className="space-y-6">
+            <Card className="border-border bg-card/50 backdrop-blur-sm">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileSearch className="h-5 w-5 text-primary" />
+                  {locale === 'ar' ? 'Google Search Console والملفات العلنية' : 'Google Search Console & public files'}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <p className="text-sm text-muted-foreground">
+                  {locale === 'ar'
+                    ? 'روابط الجذر تُبنى من عنوان المتصفح الحالي. للإنتاج يُفضّل ضبط NEXT_PUBLIC_SITE_URL في الخادم ليطابق النطاق العلني تماماً.'
+                    : 'URLs use your current browser origin. In production set NEXT_PUBLIC_SITE_URL to your canonical domain.'}
+                </p>
+
+                <div className="space-y-3 rounded-lg border border-border/80 bg-muted/20 p-4">
+                  <p className="text-sm font-medium">
+                    {locale === 'ar' ? 'روابط جاهزة للنسخ' : 'Copy-ready URLs'}
+                  </p>
+                  {(
+                    [
+                      { key: 'sitemap', label: 'sitemap.xml', path: '/sitemap.xml' },
+                      { key: 'robots', label: 'robots.txt', path: '/robots.txt' },
+                      { key: 'ads', label: 'ads.txt', path: '/ads.txt' },
+                    ] as const
+                  ).map((row) => {
+                    const full = publicOrigin ? `${publicOrigin}${row.path}` : `…${row.path}`;
+                    return (
+                      <div key={row.key} className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                        <span className="w-28 shrink-0 text-xs font-mono text-muted-foreground">
+                          {row.label}
+                        </span>
+                        <Input readOnly dir="ltr" value={full} className="font-mono text-xs" />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="shrink-0"
+                          disabled={!publicOrigin}
+                          onClick={() => void copyPublicUrl(`${publicOrigin}${row.path}`)}
+                        >
+                          <Copy className="me-1 h-3.5 w-3.5" />
+                          {locale === 'ar' ? 'نسخ' : 'Copy'}
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div>
+                  <Label htmlFor="gsc-meta-primary">
+                    {locale === 'ar'
+                      ? 'التحقق عبر وسم meta (قيمة content)'
+                      : 'Meta tag verification (content value)'}
+                  </Label>
+                  <Input
+                    id="gsc-meta-primary"
+                    dir="ltr"
+                    className="mt-1 font-mono text-sm"
+                    placeholder={locale === 'ar' ? 'أو الصق وسم الميتا كاملاً' : 'Or paste full meta tag'}
+                    value={searchConsoleForm.siteVerificationMeta}
+                    onChange={(e) =>
+                      setSearchConsoleForm((p) => ({ ...p, siteVerificationMeta: e.target.value }))
+                    }
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {locale === 'ar'
+                      ? 'يُحقَن في metadata الرئيسية (وسم google-site-verification).'
+                      : 'Injected into root metadata as google-site-verification.'}
+                  </p>
+                </div>
+
+                <div>
+                  <Label htmlFor="gsc-meta-extra">
+                    {locale === 'ar' ? 'وسم meta إضافي (اختياري)' : 'Extra meta verification (optional)'}
+                  </Label>
+                  <Input
+                    id="gsc-meta-extra"
+                    dir="ltr"
+                    className="mt-1 font-mono text-sm"
+                    value={searchConsoleForm.extraMeta}
+                    onChange={(e) => setSearchConsoleForm((p) => ({ ...p, extraMeta: e.target.value }))}
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {locale === 'ar'
+                      ? 'وسم ثانٍ بنفس الاسم عند الحاجة (نطاقات متعددة أو طلبات منفصلة).'
+                      : 'Second meta tag when Google gives another token.'}
+                  </p>
+                </div>
+
+                <div>
+                  <Label htmlFor="gsc-html-name">
+                    {locale === 'ar'
+                      ? 'ملف HTML للتحقق (اسم الملف فقط)'
+                      : 'HTML file verification (filename only)'}
+                  </Label>
+                  <Input
+                    id="gsc-html-name"
+                    dir="ltr"
+                    className="mt-1 font-mono text-sm"
+                    placeholder="googlee2845b2f8c3d1a0b.html"
+                    value={searchConsoleForm.htmlFileName}
+                    onChange={(e) =>
+                      setSearchConsoleForm((p) => ({ ...p, htmlFileName: e.target.value }))
+                    }
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {locale === 'ar'
+                      ? 'يجب أن يبدأ الاسم بـ google وينتهي بـ .html كما يعطيك Search Console.'
+                      : 'Must match Google’s filename pattern: google*.html'}
+                  </p>
+                </div>
+
+                <div>
+                  <Label htmlFor="gsc-html-body">
+                    {locale === 'ar' ? 'محتوى الملف' : 'File body'}
+                  </Label>
+                  <Textarea
+                    id="gsc-html-body"
+                    dir="ltr"
+                    className="mt-1 min-h-[80px] font-mono text-xs"
+                    placeholder="google-site-verification: …"
+                    value={searchConsoleForm.htmlFileBody}
+                    onChange={(e) =>
+                      setSearchConsoleForm((p) => ({ ...p, htmlFileBody: e.target.value }))
+                    }
+                  />
+                </div>
+
+                {publicOrigin && searchConsoleForm.htmlFileName.trim() ? (
+                  <div className="flex flex-col gap-2 rounded-md border border-dashed border-border/80 p-3 sm:flex-row sm:items-center sm:gap-3">
+                    <span className="text-xs text-muted-foreground">
+                      {locale === 'ar' ? 'رابط الملف للصقه في Google:' : 'File URL for Google:'}
+                    </span>
+                    <Input
+                      readOnly
+                      dir="ltr"
+                      className="font-mono text-xs"
+                      value={`${publicOrigin}/${searchConsoleForm.htmlFileName.trim()}`}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        void copyPublicUrl(
+                          `${publicOrigin}/${searchConsoleForm.htmlFileName.trim()}`
+                        )
+                      }
+                    >
+                      <Copy className="me-1 h-3.5 w-3.5" />
+                      {locale === 'ar' ? 'نسخ' : 'Copy'}
+                    </Button>
+                  </div>
+                ) : null}
+
+                <Button
+                  type="button"
+                  onClick={() => void handleSaveSearchConsole()}
+                  disabled={savingSearchConsole}
+                  className="w-full"
+                >
+                  {savingSearchConsole ? (
+                    <RefreshCw className="ms-1 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Check className="ms-1 h-4 w-4" />
+                  )}
+                  {locale === 'ar' ? 'حفظ إعدادات Search Console' : 'Save Search Console settings'}
+                </Button>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="adsense" className="space-y-6">
+            <Card className="border-border bg-card/50 backdrop-blur-sm">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Megaphone className="h-5 w-5 text-primary" />
+                  {locale === 'ar' ? 'جوجل AdSense' : 'Google AdSense'}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <p className="text-sm text-muted-foreground">
+                  {locale === 'ar'
+                    ? 'إعلانات العرض و ads.txt. التحقق من الملكية وملفات Google تجدها في تبويب Search Console.'
+                    : 'Display ads and ads.txt. Ownership verification lives in the Search Console tab.'}
+                </p>
+
+                <div className="flex items-center justify-between gap-4 rounded-lg border border-border/80 p-4">
+                  <div>
+                    <p className="font-medium">
+                      {locale === 'ar' ? 'تفعيل سكربت الإعلانات' : 'Enable AdSense script'}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {locale === 'ar'
+                        ? 'يحمّل adsbygoogle.js فقط عند التفعيل ووجود معرّف الناشر الصحيح.'
+                        : 'Loads adsbygoogle.js only when enabled with a valid publisher ID.'}
+                    </p>
+                  </div>
+                  <Switch
+                    checked={adsenseForm.enabled}
+                    onCheckedChange={(v) => setAdsenseForm((p) => ({ ...p, enabled: v }))}
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="adsense-pub">{locale === 'ar' ? 'معرّف الناشر (ca-pub-…)' : 'Publisher ID (ca-pub-…)'}</Label>
+                  <Input
+                    id="adsense-pub"
+                    dir="ltr"
+                    className="mt-1 font-mono text-sm"
+                    placeholder="ca-pub-xxxxxxxxxxxxxxxx"
+                    value={adsenseForm.publisherId}
+                    onChange={(e) => setAdsenseForm((p) => ({ ...p, publisherId: e.target.value }))}
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="adsense-adstxt">{locale === 'ar' ? 'محتوى ads.txt' : 'ads.txt content'}</Label>
+                  <Textarea
+                    id="adsense-adstxt"
+                    dir="ltr"
+                    className="mt-1 min-h-[120px] font-mono text-xs"
+                    placeholder="google.com, pub-xxxxxxxxxxxxxxxx, DIRECT, f08c47fec0942fa0"
+                    value={adsenseForm.adsTxtRaw}
+                    onChange={(e) => setAdsenseForm((p) => ({ ...p, adsTxtRaw: e.target.value }))}
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {locale === 'ar'
+                      ? 'إن تركت الحقل فارغاً وكان معرّف الناشر صحيحاً، يُولَّد سطر Google تلقائياً.'
+                      : 'If empty and publisher ID is set, a default Google line is generated.'}
+                  </p>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <Label htmlFor="adsense-slot-hero">{locale === 'ar' ? 'وحدة أسفل الهيرو (data-ad-slot)' : 'Below-hero unit (data-ad-slot)'}</Label>
+                    <Input
+                      id="adsense-slot-hero"
+                      dir="ltr"
+                      inputMode="numeric"
+                      className="mt-1 font-mono text-sm"
+                      placeholder="1234567890"
+                      value={adsenseForm.slotHero}
+                      onChange={(e) => setAdsenseForm((p) => ({ ...p, slotHero: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="adsense-slot-mid">
+                      {locale === 'ar' ? 'وحدة بين الأقسام (قبل نص SEO)' : 'Mid-page unit (before SEO block)'}
+                    </Label>
+                    <Input
+                      id="adsense-slot-mid"
+                      dir="ltr"
+                      inputMode="numeric"
+                      className="mt-1 font-mono text-sm"
+                      placeholder="1234567890"
+                      value={adsenseForm.slotContent}
+                      onChange={(e) => setAdsenseForm((p) => ({ ...p, slotContent: e.target.value }))}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-3 rounded-lg border border-border/80 p-4">
+                  <p className="font-medium">
+                    {locale === 'ar' ? 'إعلانات داخل صفحة المقال' : 'In-article ad placement'}
+                  </p>
+                  <div>
+                    <Label htmlFor="adsense-slot-article">
+                      {locale === 'ar' ? 'وحدة المقال (data-ad-slot)' : 'Article ad slot (data-ad-slot)'}
+                    </Label>
+                    <Input
+                      id="adsense-slot-article"
+                      dir="ltr"
+                      inputMode="numeric"
+                      className="mt-1 font-mono text-sm"
+                      placeholder="1234567890"
+                      value={adsenseForm.slotArticle}
+                      onChange={(e) => setAdsenseForm((p) => ({ ...p, slotArticle: e.target.value }))}
+                    />
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <label className="flex items-center justify-between rounded-md border border-border/70 p-3">
+                      <span className="text-sm">{locale === 'ar' ? 'أعلى المقال' : 'Top of article'}</span>
+                      <Switch
+                        checked={adsenseForm.articleTopEnabled}
+                        onCheckedChange={(v) => setAdsenseForm((p) => ({ ...p, articleTopEnabled: v }))}
+                      />
+                    </label>
+                    <label className="flex items-center justify-between rounded-md border border-border/70 p-3">
+                      <span className="text-sm">{locale === 'ar' ? 'وسط المقال' : 'Middle of article'}</span>
+                      <Switch
+                        checked={adsenseForm.articleInlineEnabled}
+                        onCheckedChange={(v) => setAdsenseForm((p) => ({ ...p, articleInlineEnabled: v }))}
+                      />
+                    </label>
+                    <label className="flex items-center justify-between rounded-md border border-border/70 p-3">
+                      <span className="text-sm">{locale === 'ar' ? 'أسفل المقال' : 'Bottom of article'}</span>
+                      <Switch
+                        checked={adsenseForm.articleBottomEnabled}
+                        onCheckedChange={(v) => setAdsenseForm((p) => ({ ...p, articleBottomEnabled: v }))}
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                <p className="text-xs text-muted-foreground">
+                  {locale === 'ar'
+                    ? 'يُفضّل عدم زيادة عدد الوحدات عن وحدتين في الصفحة الرئيسية، مع تسمية «إعلان» كما هو معروض. قبول AdSense يعتمد على المحتوى وسياسة الخصوصية وليس على الإعدادات التقنية وحدها.'
+                    : 'Keeping two labeled ad units on the home page aligns with common policy practice. Approval depends on content and privacy policy, not settings alone.'}
+                </p>
+
+                <Button type="button" onClick={() => void handleSaveAdsense()} disabled={savingAdsense} className="w-full">
+                  {savingAdsense ? (
+                    <RefreshCw className="ml-1 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Check className="ml-1 h-4 w-4" />
+                  )}
+                  {locale === 'ar' ? 'حفظ إعدادات AdSense' : 'Save AdSense settings'}
+                </Button>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="articles" className="space-y-6">
+            <AdminArticlesTab locale={locale} />
+          </TabsContent>
+
+          <TabsContent value="analytics" className="space-y-6">
+            <AdminAnalyticsTab locale={locale} />
+          </TabsContent>
+
+          <TabsContent value="api" className="space-y-6">
+            <Card className="bg-card/50 border-border backdrop-blur-sm">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Code className="w-5 h-5 text-primary" />
+                  {locale === 'ar' ? 'إعدادات صفحة API والاشتراك' : 'API page & subscription settings'}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  {locale === 'ar'
+                    ? 'يُعرض السعر والمدة في /api-access. عند الموافقة على طلب أو إضافة نطاق يدوياً يُضبط تاريخ انتهاء = اليوم + عدد الأيام هنا؛ بعدها يُعطّل النطاق تلقائياً عند طلب /api/rates.'
+                    : 'Price and duration appear on /api-access. New approvals/manual domains get expiresAt = today + days below; expired domains auto-disable on /api/rates.'}
+                </p>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <Label>{locale === 'ar' ? 'السعر (USD)' : 'Price (USD)'}</Label>
+                    <Input
+                      type="text"
+                      inputMode="decimal"
+                      value={platformApiSubscriptionPriceUsd}
+                      onChange={(e) => setPlatformApiSubscriptionPriceUsd(e.target.value)}
+                      dir="ltr"
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <Label>{locale === 'ar' ? 'مدة الاشتراك (يوم)' : 'Subscription period (days)'}</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={3650}
+                      value={platformApiSubscriptionDays}
+                      onChange={(e) => setPlatformApiSubscriptionDays(e.target.value)}
+                      dir="ltr"
+                      className="mt-1"
+                    />
+                  </div>
+                </div>
+                <Label>{locale === 'ar' ? 'عنوان المحفظة USDT (TRC20)' : 'USDT TRC20 wallet address'}</Label>
+                <Input
+                  value={platformApiUsdtTrc20}
+                  onChange={(e) => setPlatformApiUsdtTrc20(e.target.value)}
+                  dir="ltr"
+                  placeholder="T..."
+                  className="font-mono text-sm"
+                />
+                <Button onClick={handleSaveUsdtWallet} disabled={savingUsdtWallet}>
+                  {savingUsdtWallet ? (
+                    <RefreshCw className="w-4 h-4 ml-1 animate-spin" />
+                  ) : (
+                    <Check className="w-4 h-4 ml-1" />
+                  )}
+                  {locale === 'ar' ? 'حفظ الإعدادات' : 'Save settings'}
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-card/50 border-border backdrop-blur-sm">
+              <CardHeader>
+                <CardTitle>
+                  {locale === 'ar' ? 'طلبات وصول API' : 'API access requests'}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {apiAccessLoading && (
+                  <p className="text-sm text-muted-foreground">{locale === 'ar' ? 'جاري التحميل…' : 'Loading…'}</p>
+                )}
+                {!apiAccessLoading && apiRequests.length === 0 && (
+                  <p className="text-sm text-muted-foreground">{locale === 'ar' ? 'لا طلبات بعد.' : 'No requests yet.'}</p>
+                )}
+                {apiRequests.map((req) => (
+                  <div
+                    key={req.id}
+                    className="rounded-lg border border-border/80 bg-muted/30 p-4 text-sm space-y-2"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="font-medium">{req.fullName}</span>
+                      <span
+                        className={`rounded px-2 py-0.5 text-xs ${
+                          req.status === 'PENDING'
+                            ? 'bg-amber-500/20 text-amber-800 dark:text-amber-200'
+                            : req.status === 'APPROVED'
+                              ? 'bg-green-500/20 text-green-800 dark:text-green-200'
+                              : 'bg-muted text-muted-foreground'
+                        }`}
+                      >
+                        {req.status}
+                      </span>
+                    </div>
+                    <p className="text-muted-foreground break-all" dir="ltr">
+                      {req.email} · {req.phone}
+                    </p>
+                    <p>
+                      {req.websiteName} —{' '}
+                      <span className="break-all" dir="ltr">
+                        {req.websiteUrl}
+                      </span>
+                    </p>
+                    <p className="text-muted-foreground">
+                      {req.usagePurpose} / {req.programmingType}
+                    </p>
+                    {req.receiptImageUrl && (
+                      <a
+                        href={req.receiptImageUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary underline text-xs"
+                      >
+                        {locale === 'ar' ? 'عرض إيصال الدفع' : 'View receipt'}
+                      </a>
+                    )}
+                    {req.status === 'PENDING' && (
+                      <div className="flex flex-col gap-2 pt-2 sm:flex-row sm:items-end">
+                        <div className="flex-1">
+                          <Label className="text-xs">
+                            {locale === 'ar' ? 'نطاق للتفعيل (اختياري، افتراضي من الرابط)' : 'Domain to allow (optional)'}
+                          </Label>
+                          <Input
+                            value={approveDomainDraft[req.id] ?? ''}
+                            onChange={(e) =>
+                              setApproveDomainDraft((prev) => ({ ...prev, [req.id]: e.target.value }))
+                            }
+                            dir="ltr"
+                            placeholder={req.websiteUrl}
+                            className="mt-1 font-mono text-xs"
+                          />
+                        </div>
+                        <div className="flex gap-2">
+                          <Button size="sm" onClick={() => handleApproveApiRequest(req.id)}>
+                            {locale === 'ar' ? 'موافقة' : 'Approve'}
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={() => handleRejectApiRequest(req.id)}>
+                            {locale === 'ar' ? 'رفض' : 'Reject'}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+
+            <Card className="bg-card/50 border-border backdrop-blur-sm">
+              <CardHeader>
+                <CardTitle>{locale === 'ar' ? 'النطاقات المصرّح بها' : 'Allowed domains'}</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                  <div className="flex-1">
+                    <Label>{locale === 'ar' ? 'إضافة نطاق يدوياً' : 'Add domain manually'}</Label>
+                    <Input
+                      value={newManualDomain}
+                      onChange={(e) => setNewManualDomain(e.target.value)}
+                      dir="ltr"
+                      placeholder="example.com"
+                      className="mt-1 font-mono text-sm"
+                    />
+                  </div>
+                  <Button type="button" onClick={handleAddManualDomain}>
+                    {locale === 'ar' ? 'إضافة' : 'Add'}
+                  </Button>
+                </div>
+                {apiDomains.length === 0 && !apiAccessLoading && (
+                  <p className="text-sm text-muted-foreground">
+                    {locale === 'ar'
+                      ? 'القائمة فارغة: لا قيود على /api/rates. أي نطاق يمكنه الاستدعاء من المتصفح.'
+                      : 'Empty list: no origin restrictions on /api/rates.'}
+                  </p>
+                )}
+                <ul className="space-y-3">
+                  {apiDomains.map((d) => {
+                    const exp = d.expiresAt ? new Date(d.expiresAt) : null;
+                    const expired = !!(exp && exp.getTime() < Date.now());
+                    const expLabel =
+                      exp &&
+                      exp.toLocaleDateString(locale === 'ar' ? 'ar-SY' : 'en-US', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric',
+                      });
+                    return (
+                    <li
+                      key={d.id}
+                      className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border/60 bg-background/50 px-3 py-2"
+                    >
+                      <div className="min-w-0">
+                        <p className="font-mono text-sm break-all" dir="ltr">
+                          {d.domain}
+                        </p>
+                        {d.request && (
+                          <p className="text-xs text-muted-foreground">
+                            {d.request.fullName} · {d.request.email}
+                          </p>
+                        )}
+                        {d.expiresAt ? (
+                          <p className={`text-xs ${expired ? 'text-destructive' : 'text-muted-foreground'}`}>
+                            {locale === 'ar' ? 'ينتهي الاشتراك:' : 'Subscription ends:'}{' '}
+                            {expLabel}
+                            {expired ? ` (${locale === 'ar' ? 'منتهي' : 'expired'})` : ''}
+                          </p>
+                        ) : (
+                          <p className="text-xs text-amber-700 dark:text-amber-500/90">
+                            {locale === 'ar' ? 'بدون تاريخ انتهاء (سجل قديم)' : 'No expiry date (legacy row)'}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2">
+                          <Switch
+                            checked={d.enabled}
+                            onCheckedChange={(v) => handleToggleApiDomain(d.id, v)}
+                          />
+                          <span className="text-xs text-muted-foreground">
+                            {d.enabled ? (locale === 'ar' ? 'مفعّل' : 'On') : locale === 'ar' ? 'معطّل' : 'Off'}
+                          </span>
+                        </div>
+                        <Button size="sm" variant="ghost" className="text-destructive" onClick={() => handleDeleteApiDomain(d.id)}>
+                          {locale === 'ar' ? 'حذف' : 'Del'}
+                        </Button>
+                      </div>
+                    </li>
+                    );
+                  })}
+                </ul>
+              </CardContent>
+            </Card>
+          </TabsContent>
+          </div>
+        </Tabs>
+      </main>
+
+      {/* Footer */}
+      <footer className="bg-card/80 border-t py-4 mt-8">
+        <div className="container mx-auto px-4">
+          <div className="flex items-center justify-between text-sm text-muted-foreground">
+            <span>{t('site.title')} - {t('admin.title')}</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleLogout}
+              className="text-destructive hover:text-destructive"
+            >
+              <LogOut className="w-4 h-4 ml-1" />
+              {t('admin.logout')}
+            </Button>
+          </div>
+        </div>
+      </footer>
+    </div>
+  );
+}
