@@ -1,0 +1,59 @@
+# نشر تلقائي على السيرفر بعد push إلى GitHub (SSH + سحب + بناء + PM2)
+#
+# أضف في GitHub → Settings → Secrets and variables → Actions:
+#   DEPLOY_HOST      = IP أو نطاق السيرفر (مثلاً srv1537202 أو 1.2.3.4)
+#   DEPLOY_USER      = root أو مستخدم له صلاحية المجلد و pm2
+#   DEPLOY_SSH_KEY   = المفتاح الخاص (كامل PEM) يطابق المفتاح العام في authorized_keys على السيرفر
+# اختياري:
+#   DEPLOY_PORT      = 22 (افتراضي إن لم تُعرّف)
+#   DEPLOY_GIT_BRANCH = monorepo أو main (إن لم تُعرّف يُستخدم monorepo)
+#
+# على السيرفر (مرة واحدة):
+#   ssh-keygen -t ed25519 -f ~/.ssh/github_deploy -N ""
+#   cat ~/.ssh/github_deploy.pub >> ~/.ssh/authorized_keys
+#   انسخ محتوى github_deploy (الخاص) إلى Secret DEPLOY_SSH_KEY
+
+name: Deploy server
+
+on:
+  push:
+    branches:
+      - monorepo
+      - main
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH deploy
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          command_timeout: 25m
+          script_stop: true
+          script: |
+            set -euo pipefail
+            REPO_ROOT="/var/www/nsp-app"
+            APP_DIR="$REPO_ROOT/app"
+            BRANCH="${{ secrets.DEPLOY_GIT_BRANCH }}"
+            if [ -z "$BRANCH" ]; then BRANCH="monorepo"; fi
+            cd "$REPO_ROOT"
+            git fetch origin
+            git checkout "$BRANCH"
+            git pull origin "$BRANCH"
+            cd "$APP_DIR"
+            test -f .env || { echo "ERROR: missing $APP_DIR/.env (need DATABASE_URL etc.)"; exit 1; }
+            npm ci
+            npx prisma generate
+            npx prisma db push
+            npm run build
+            if pm2 describe nsp-next >/dev/null 2>&1; then pm2 restart nsp-next;
+            elif pm2 describe nsp-app >/dev/null 2>&1; then pm2 restart nsp-app;
+            else pm2 restart all; fi
+            pm2 save || true

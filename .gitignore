@@ -1,0 +1,75 @@
+# Monorepo — Next.js (app) + Flutter (nsp_mobile)
+**/node_modules/
+**/.next/
+**/out/
+**/.turbo/
+**/.vercel/
+
+# Flutter / Dart
+**/.dart_tool/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/.pub-cache/
+**/.pub/
+**/build/
+!**/build/.gitkeep
+
+# Env & secrets (never commit)
+.env
+.env.*
+!.env.example
+
+# SQLite & local DB
+**/*.db
+**/*.db-journal
+
+# Uploads (generated on server)
+app/public/uploads/*
+!app/public/uploads/.gitkeep
+app/uploads/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+*.swp
+.atom/
+
+# Local / runtime (Next app)
+app/.accesslog
+app/.stats
+**/.zscripts/dev.pid
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# TypeScript / misc
+*.tsbuildinfo
+next-env.d.ts
+
+# Cursor / local tooling
+.cursor/
+local-*
+.claude
+.z-ai-config
+
+# Optional large / temp trees
+extracted/
+**/coverage/
+**/.history/
+
+# Android / iOS (Flutter)
+**/android/.gradle/
+**/android/captures/
+**/android/app/debug/
+**/android/app/profile/
+**/android/app/release/
+**/ios/Pods/
+**/ios/.symlinks/
+
+# Archives (local backups)
+project.zip
